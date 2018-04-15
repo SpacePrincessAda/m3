@@ -1,0 +1,13 @@
+# OS
+.DS_Store
+
+# ctime
+utils/ctime
+.build.ctm
+
+# build files
+build
+
+# temp files
+temp
+
