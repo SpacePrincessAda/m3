@@ -1,14 +1,60 @@
 #include <stdio.h>
+#include <stdalign.h>
 
 #include "mac_inc.h" // PCH
 
 #include "types.h"
 #include "cave_math.h"
+#include "game.h"
 
 // TODO: Pass this into the application delegate
 static int initial_window_width = 840;
 static int initial_window_height = 480;
 static const char* window_title = "app";
+
+// NOTE: Could also just make position a v4 to achieve alignment
+typedef struct vertex_t {
+  v2 position;
+  alignas(16) v4 color;
+} vertex_t;
+
+typedef struct {
+  long size;
+  char* contents;
+} entire_file_t;
+
+entire_file_t read_entire_file(const char* path) {
+  entire_file_t result = {};
+
+  FILE *f = fopen(path, "rb");
+  if (f) {
+    fseek(f, 0, SEEK_END);
+    result.size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    
+    result.contents = (char*)malloc(result.size + 1);
+    fread(result.contents, result.size + 1, 1, f);
+    fclose(f);
+    result.contents[result.size] = 0;
+  } else {
+    printf("ERROR: Cannot open file %s.\n", path);
+  }
+  
+  return(result);
+}
+
+id<MTLLibrary> compile_metal_library(id<MTLDevice> device, const char* src) {
+  NSError* err = NULL;
+  id<MTLLibrary> lib = [device
+    newLibraryWithSource:[NSString stringWithUTF8String:src]
+    options:nil
+    error:&err
+  ];
+  if (err) {
+    puts([err.localizedDescription UTF8String]);
+  }
+  return lib;
+}
 
 // Interface
 
@@ -91,6 +137,10 @@ static const char* window_title = "app";
 @implementation MetalKitView
 {
   id<MTLCommandQueue> _command_queue;
+  id<MTLRenderPipelineState> _standard_pso;
+
+  s32 viewport_size[2];
+
   f64 mach_to_ms;
   u64 last_time;
   f64 delta_time;
@@ -102,6 +152,7 @@ static const char* window_title = "app";
     [self setDevice: device];
     [self _setupTimer];
     [self _setupMetal];
+    // [self _loadAssets];
   }
   return self;
 }
@@ -116,12 +167,36 @@ static const char* window_title = "app";
 
 - (void)_setupMetal {
   [self setPreferredFramesPerSecond:60];
-  [self setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
+  // [self setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
   [self setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
   [self setSampleCount:1];
 
+  // Load shaders
+  entire_file_t file = read_entire_file("src/shaders/standard.metal");
+  id<MTLLibrary> library = compile_metal_library(self.device, file.contents);
+  free(file.contents);
+
+  id<MTLFunction> vertex_func = [library newFunctionWithName:@"vs_main"];
+  id<MTLFunction> fragment_func = [library newFunctionWithName:@"fs_main"];
+
+  // PSO
+  MTLRenderPipelineDescriptor *psd = [MTLRenderPipelineDescriptor new];
+  psd.label = @"Standard Pipeline";
+  psd.vertexFunction = vertex_func;
+  psd.fragmentFunction = fragment_func;
+  psd.colorAttachments[0].pixelFormat = self.colorPixelFormat;
+
+  NSError *error = nil;
+  _standard_pso = [self.device newRenderPipelineStateWithDescriptor:psd error:&error];
+  if (!_standard_pso) {
+    NSLog(@"Error occurred when creating render pipeline state: %@", error);
+  }
+
   _command_queue = [self.device newCommandQueue];
 }
+
+// - (void)_loadAssets {
+// }
 
 - (BOOL)isOpaque {
   return YES;
@@ -140,10 +215,15 @@ static const char* window_title = "app";
 }
 
 - (void)drawRect:(CGRect)rect {
-  // v2 window_size = {
-  //   rect.size.width,
-  //   rect.size.height,
-  // };
+  static const vertex_t verts[] = {
+    {{ 250, -250}, {1, 0, 0, 1}},
+    {{-250, -250}, {0, 1, 0, 1}},
+    {{   0,  250}, {0, 0, 1, 1}},
+  };
+
+  CGSize s = [self drawableSize];
+  viewport_size[0] = s.width;
+  viewport_size[1] = s.height;
 
   id<MTLTexture> texture = [[self currentDrawable] texture];
   MTLRenderPassDescriptor *pass = [self currentRenderPassDescriptor];
@@ -157,6 +237,21 @@ static const char* window_title = "app";
   id<MTLRenderCommandEncoder> encoder = [
     command_buffer renderCommandEncoderWithDescriptor:pass
   ];
+
+  [encoder setRenderPipelineState:_standard_pso];
+  
+  [encoder setVertexBytes:verts
+                   length:sizeof(verts)
+                  atIndex:0];
+
+  [encoder setVertexBytes:&viewport_size
+                   length:sizeof(viewport_size)
+                  atIndex:1];
+
+  [encoder drawPrimitives:MTLPrimitiveTypeTriangle
+              vertexStart:0
+              vertexCount:3];
+
   [encoder endEncoding];
 
   [command_buffer presentDrawable:[self currentDrawable]];

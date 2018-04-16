@@ -1,3 +1,4 @@
+#pragma once
 #include <stddef.h> // ptrdiff_t
 #include <inttypes.h>
 #include <stdint.h>
