@@ -11,3 +11,8 @@ build
 # temp files
 temp
 
+# Xcode
+project.xcworkspace
+xcschememanagement.plist
+xcuserdata
+
