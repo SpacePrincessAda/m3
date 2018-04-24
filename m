@@ -31,7 +31,7 @@ fi
 $CTIME_EXEC -begin "$CTIME_TIMING_FILE"
 
 mkdir -p build
-$CXX -include-pch $PCH_OUT $CXX_FLAGS $OSX_FLAGS $ENTRY -o $OUTPUT
+$CXX -include-pch $PCH_OUT -g $CXX_FLAGS $OSX_FLAGS $ENTRY -o $OUTPUT
 
 # ctime end
 LAST_ERROR=$?
