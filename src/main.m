@@ -13,18 +13,19 @@ static int initial_window_height = 480;
 static const char* window_title = "app";
 
 // NOTE: Could also just make position a v4 to achieve alignment
+
 typedef struct vertex_t {
-  v2 position;
+  alignas(8) v2 position;
   alignas(16) v4 color;
 } vertex_t;
 
 typedef struct {
   long size;
   char* contents;
-} entire_file_t;
+} file_t;
 
-entire_file_t read_entire_file(const char* path) {
-  entire_file_t result = {};
+file_t read_file(const char* path) {
+  file_t result = {};
 
   FILE *f = fopen(path, "rb");
   if (f) {
@@ -167,12 +168,12 @@ id<MTLLibrary> compile_metal_library(id<MTLDevice> device, const char* src) {
 
 - (void)_setupMetal {
   [self setPreferredFramesPerSecond:60];
-  // [self setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
+  [self setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
   [self setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
   [self setSampleCount:1];
 
   // Load shaders
-  entire_file_t file = read_entire_file("src/shaders/standard.metal");
+  file_t file = read_file("src/shaders/standard.metal");
   id<MTLLibrary> library = compile_metal_library(self.device, file.contents);
   free(file.contents);
 
@@ -185,6 +186,8 @@ id<MTLLibrary> compile_metal_library(id<MTLDevice> device, const char* src) {
   psd.vertexFunction = vertex_func;
   psd.fragmentFunction = fragment_func;
   psd.colorAttachments[0].pixelFormat = self.colorPixelFormat;
+  psd.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+  psd.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
 
   NSError *error = nil;
   _standard_pso = [self.device newRenderPipelineStateWithDescriptor:psd error:&error];
