@@ -5,19 +5,17 @@
 
 #include "types.h"
 #include "cave_math.h"
-#include "game.h"
+// #include "game.h"
+#include "shader_types.h"
 
 // TODO: Pass this into the application delegate
 static int initial_window_width = 840;
 static int initial_window_height = 480;
 static const char* window_title = "app";
 
-// NOTE: Could also just make position a v4 to achieve alignment
-
-typedef struct vertex_t {
-  alignas(8) v2 position;
-  alignas(16) v4 color;
-} vertex_t;
+static int aligned_size(int sz) {
+  return (sz + 0xFF) & ~0xFF;
+}
 
 typedef struct {
   long size;
@@ -44,17 +42,31 @@ file_t read_file(const char* path) {
   return(result);
 }
 
-id<MTLLibrary> compile_metal_library(id<MTLDevice> device, const char* src) {
+// TODO: better error handling
+id<MTLLibrary> compile_shaders_from_source(id<MTLDevice> device, const char* src) {
   NSError* err = NULL;
-  id<MTLLibrary> lib = [device
-    newLibraryWithSource:[NSString stringWithUTF8String:src]
-    options:nil
-    error:&err
+  id<MTLLibrary> library = [
+    device newLibraryWithSource:[NSString stringWithUTF8String:src]
+                        options:nil
+                          error:&err
   ];
   if (err) {
     puts([err.localizedDescription UTF8String]);
   }
-  return lib;
+  return library;
+}
+
+// TODO: better error handling
+id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
+  NSError* err = NULL;
+  id<MTLLibrary> library = [
+    device newLibraryWithFile:[NSString stringWithUTF8String:src]
+                        error:&err
+  ];
+  if (err) {
+    puts([err.localizedDescription UTF8String]);
+  }
+  return library;
 }
 
 // Interface
@@ -89,17 +101,17 @@ id<MTLLibrary> compile_metal_library(id<MTLDevice> device, const char* src) {
 
 - (void)applicationDidFinishLaunching:(NSNotification*)notification {
   window_delegate = [[WindowDelegate alloc] init];
-	NSUInteger window_style = NSWindowStyleMaskTitled
-													| NSWindowStyleMaskClosable
-													| NSWindowStyleMaskMiniaturizable
-													| NSWindowStyleMaskResizable;
+  NSUInteger window_style = NSWindowStyleMaskTitled
+                          | NSWindowStyleMaskClosable
+                          | NSWindowStyleMaskMiniaturizable
+                          | NSWindowStyleMaskResizable;
 
   window = [[NSWindow alloc] 
-    initWithContentRect:NSMakeRect(
-        0, 0, initial_window_width, initial_window_height)
-    styleMask:window_style
-    backing:NSBackingStoreBuffered
-    defer:NO];
+    initWithContentRect:NSMakeRect(0, 0, initial_window_width, initial_window_height)
+              styleMask:window_style
+                backing:NSBackingStoreBuffered
+                  defer:NO
+  ];
 
   [window setTitle:[NSString stringWithUTF8String:window_title]];
   [window setAcceptsMouseMovedEvents:YES];
@@ -140,7 +152,7 @@ id<MTLLibrary> compile_metal_library(id<MTLDevice> device, const char* src) {
   id<MTLCommandQueue> _command_queue;
   id<MTLRenderPipelineState> _standard_pso;
 
-  s32 viewport_size[2];
+  fs_params_t fs_params;
 
   f64 mach_to_ms;
   u64 last_time;
@@ -173,12 +185,9 @@ id<MTLLibrary> compile_metal_library(id<MTLDevice> device, const char* src) {
   [self setSampleCount:1];
 
   // Load shaders
-  file_t file = read_file("src/shaders/standard.metal");
-  id<MTLLibrary> library = compile_metal_library(self.device, file.contents);
-  free(file.contents);
-
-  id<MTLFunction> vertex_func = [library newFunctionWithName:@"vs_main"];
-  id<MTLFunction> fragment_func = [library newFunctionWithName:@"fs_main"];
+  id<MTLLibrary> library = load_shader_library(self.device, "build/standard.metallib");
+  id<MTLFunction> vertex_func = [library newFunctionWithName:@"screen_vs_main"];
+  id<MTLFunction> fragment_func = [library newFunctionWithName:@"screen_fs_main"];
 
   // PSO
   MTLRenderPipelineDescriptor *psd = [MTLRenderPipelineDescriptor new];
@@ -218,15 +227,9 @@ id<MTLLibrary> compile_metal_library(id<MTLDevice> device, const char* src) {
 }
 
 - (void)drawRect:(CGRect)rect {
-  static const vertex_t verts[] = {
-    {{ 250, -250}, {1, 0, 0, 1}},
-    {{-250, -250}, {0, 1, 0, 1}},
-    {{   0,  250}, {0, 0, 1, 1}},
-  };
-
   CGSize s = [self drawableSize];
-  viewport_size[0] = s.width;
-  viewport_size[1] = s.height;
+  fs_params.viewport.x = s.width;
+  fs_params.viewport.y = s.height;
 
   id<MTLTexture> texture = [[self currentDrawable] texture];
   MTLRenderPassDescriptor *pass = [self currentRenderPassDescriptor];
@@ -237,25 +240,20 @@ id<MTLLibrary> compile_metal_library(id<MTLDevice> device, const char* src) {
   pass.colorAttachments[0].clearColor = MTLClearColorMake(0.16f, 0.17f, 0.2f, 1.0f);
 
   id<MTLCommandBuffer> command_buffer = [_command_queue commandBuffer];
-  id<MTLRenderCommandEncoder> encoder = [
+  id<MTLRenderCommandEncoder> enc = [
     command_buffer renderCommandEncoderWithDescriptor:pass
   ];
 
-  [encoder setRenderPipelineState:_standard_pso];
+  [enc setRenderPipelineState:_standard_pso];
   
-  [encoder setVertexBytes:verts
-                   length:sizeof(verts)
-                  atIndex:0];
+  [enc setFragmentBytes:&fs_params
+                     length:sizeof(fs_params_t)
+                    atIndex:0];
 
-  [encoder setVertexBytes:&viewport_size
-                   length:sizeof(viewport_size)
-                  atIndex:1];
+  // Full screen triangle
+  [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
 
-  [encoder drawPrimitives:MTLPrimitiveTypeTriangle
-              vertexStart:0
-              vertexCount:3];
-
-  [encoder endEncoding];
+  [enc endEncoding];
 
   [command_buffer presentDrawable:[self currentDrawable]];
   [command_buffer commit];
@@ -275,9 +273,11 @@ void macos_create_menu(void) {
   // App menu
   NSMenuItem* app_menu_item = [NSMenuItem new];
   [menu_bar addItem:app_menu_item];
-  NSMenuItem* quit_item = [[NSMenuItem alloc] initWithTitle:@"Quit"
-                                              action:@selector(terminate:)
-                                              keyEquivalent:@"q"];
+  NSMenuItem* quit_item = [[NSMenuItem alloc] 
+    initWithTitle:@"Quit"
+           action:@selector(terminate:)
+    keyEquivalent:@"q"
+  ];
 
   NSMenu* app_menu = [NSMenu new];
   [app_menu addItem:quit_item];
