@@ -193,7 +193,6 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 
   mtl_device = MTLCreateSystemDefaultDevice();
   mtk_view = [[MetalKitView alloc] initWithDevice:mtl_device];
-  [window makeFirstResponder:mtk_view];
 
   [window setContentView:mtk_view];
   // [[mtk_view layer] setMagnificationFilter:kCAFilterNearest];
