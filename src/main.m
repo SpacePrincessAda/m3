@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdalign.h>
+#include <sys/stat.h>
+#include <time.h>
 
 #include "mac_inc.h" // PCH
 
@@ -16,6 +18,8 @@ static int initial_window_height = 480;
 static const char* window_title = "app";
 static app_t app = {};
 static world_t world = {};
+
+const char* shader_lib_path = "build/standard.metallib";
 
 static void update_button(button_t* button, bool down) {
   bool was_down = button->down;
@@ -97,6 +101,17 @@ file_t read_file(const char* path) {
   }
   
   return(result);
+}
+
+time_t get_last_write_time(const char *filename) {
+  time_t last_write_time = 0;
+
+  struct stat status;
+  if (stat(filename, &status) == 0) {
+    last_write_time = status.st_mtime;
+  }
+
+  return (last_write_time);
 }
 
 // TODO: better error handling
@@ -211,6 +226,8 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   id<MTLRenderPipelineState> _standard_pso;
 
   fs_params_t fs_params;
+
+  time_t shader_lib_ts;
 }
 
 -(nonnull instancetype)initWithDevice:(nonnull id<MTLDevice>)device {
@@ -219,7 +236,6 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
     [self setDevice: device];
     [self _setupApp];
     [self _setupMetal];
-    // [self _loadAssets];
   }
   return self;
 }
@@ -229,14 +245,13 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   init_world(&app, &world);
 }
 
-- (void)_setupMetal {
-  [self setPreferredFramesPerSecond:60];
-  [self setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
-  [self setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
-  [self setSampleCount:1];
+- (void)_createPSO {
+  if (_standard_pso) {
+    [_standard_pso release];
+  }
 
   // Load shaders
-  id<MTLLibrary> library = load_shader_library(self.device, "build/standard.metallib");
+  id<MTLLibrary> library = load_shader_library(self.device, shader_lib_path);
   id<MTLFunction> vertex_func = [library newFunctionWithName:@"screen_vs_main"];
   id<MTLFunction> fragment_func = [library newFunctionWithName:@"screen_fs_main"];
 
@@ -254,12 +269,20 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   if (!_standard_pso) {
     NSLog(@"Error occurred when creating render pipeline state: %@", error);
   }
+  [psd release];
+  [vertex_func release];
+  [fragment_func release];
+  [library release];
+}
+
+- (void)_setupMetal {
+  [self setPreferredFramesPerSecond:60];
+  [self setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
+  [self setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
+  [self setSampleCount:1];
 
   _command_queue = [self.device newCommandQueue];
 }
-
-// - (void)_loadAssets {
-// }
 
 - (BOOL)isOpaque {
   return YES;
@@ -287,7 +310,18 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   update_button(&app.keys[code], false);
 }
 
+- (void)_loadAssets {
+  time_t new_shader_lib_ts = get_last_write_time(shader_lib_path);
+  if (new_shader_lib_ts != shader_lib_ts) {
+    [self _createPSO];
+    shader_lib_ts = new_shader_lib_ts;
+    printf("shader library loaded\n");
+  }
+}
+
 - (void)drawRect:(CGRect)rect {
+  [self _loadAssets];
+
   CGSize s = [self drawableSize];
   float aspect = s.width/s.height;
 
