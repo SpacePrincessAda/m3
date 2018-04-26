@@ -38,7 +38,7 @@ $CTIME_EXEC -begin "$CTIME_TIMING_FILE"
 mkdir -p $BUILD
 
 # compile shader library
-xcrun -sdk macosx metal -Wno-unused-variable $SRC/shaders/standard.metal -o $BUILD/standard.air
+xcrun -sdk macosx metal -Wno-unused-variable -mmacosx-version-min=10.11 -std=osx-metal1.1 $SRC/shaders/standard.metal -o $BUILD/standard.air
 xcrun -sdk macosx metallib $BUILD/standard.air -o $BUILD/standard.metallib
 
 # compile executable
