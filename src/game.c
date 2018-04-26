@@ -14,16 +14,20 @@ Platform:
 #define CAMERA_DEFAULT_FP_POS V3(0,1,-5)
 #define CAMERA_DEFAULT_ORBIT_POS V3(5,3,-5)
 
+// TODO: Put these somewhere else
+static float yaw = 0.0f;
+static float pitch = 0.0f;
+
 void init_world(app_t* app, world_t *world) {
   world->camera.position = CAMERA_DEFAULT_ORBIT_POS;
   world->camera.target = V3(0,1,0);
   world->camera.up = V3(0,1,0);
   world->camera.vfov = 45.0f;
-}
 
-// TODO: Put these somewhere else
-static float yaw = 0.0f;
-static float pitch = 0.0f;
+  // defaults for orbit cam
+  yaw = M_PI * 1.25;
+  pitch = M_PI * 0.1;
+}
 
 void update_and_render(app_t* app, world_t *world) {
   // printf("%f\n", app->clocks.delta_secs);
@@ -56,15 +60,15 @@ void update_and_render(app_t* app, world_t *world) {
 
   // Look vertical
   if (app->keys[KEY_DOWN].down) {
-    pitch += 2.0f * dt;
+    pitch -= 2.0f * dt;
   }
   if (app->keys[KEY_UP].down) {
-    pitch -= 2.0f * dt;
+    pitch += 2.0f * dt;
   }
 
   // Orbit the center
   m3x3 rm = rot3xy(-pitch, -yaw);
-  world->camera.position = mul3x3(rm, CAMERA_DEFAULT_ORBIT_POS);
+  world->camera.position = mul3x3(rm, V3(0,0,10));
 
   // First person camera
   // m3x3 rm = rot3xy(pitch, yaw);
