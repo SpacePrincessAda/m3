@@ -127,23 +127,7 @@ float3 march(float3 ro, float3 rd) {
   return float3(0);
 }
 
-camera_t create_camera(float3 from, float3 to, float3 up, float vfov, float aspect) {
-  float theta = vfov * M_PI_F / 180.0f;
-  float half_height = tan(theta/2);
-  float half_width = aspect * half_height;
-  float3 w = normalize(from - to);
-  float3 u = normalize(cross(up, w));
-  float3 v = cross(w, u);
-  camera_t c = {
-    from,
-    2*half_width*u,
-    2*half_height*v,
-    from - (half_width*u) - (half_height*v) - w,
-  };
-  return c;
-}
-
-ray_t ray_from_camera(camera_t c, float u, float v) {
+ray_t ray_from_camera(render_camera_t c, float u, float v) {
   return {
     c.position,
     c.film_lower_left + (u*c.film_h) + (v*c.film_v) - c.position,
@@ -158,7 +142,7 @@ vertex screen_vert_t screen_vs_main(ushort vid [[vertex_id]]) {
 }
 
 fragment float4 screen_fs_main(screen_vert_t i [[stage_in]], constant fs_params_t &rp [[buffer(0)]]) {
-  camera_t camera = create_camera(float3(5,3,-5), float3(0,1,0), float3(0,1,0), 45.0f, rp.viewport.x/rp.viewport.y);
+  render_camera_t camera = rp.camera;
   ray_t ray = ray_from_camera(camera, i.uv.x, i.uv.y);
 
   float3 color = march(ray.o, ray.d);

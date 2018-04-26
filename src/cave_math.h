@@ -73,6 +73,10 @@ typedef union quat {
 } quat;
 
 // column major
+typedef union m3x3 {
+  f32 e[3][3];
+} m3x3;
+
 typedef union m4x4 {
   f32 e[4][4];
 } m4x4;
@@ -81,6 +85,14 @@ typedef union m4x4 {
 //
 // constructors
 //
+
+static inline v2 
+V2(f32 x, f32 y) {
+  v2 r;
+  r.x = x;
+  r.y = y;
+  return r;
+}
 
 static inline v3 
 V3(f32 x, f32 y, f32 z) {
@@ -97,6 +109,17 @@ V3(f32 x, f32 y, f32 z) {
 #define v3_up       V3(0, 1, 0)
 #define v3_forward  V3(0, 0, 1)
 
+static inline quat
+Q(f32 x, f32 y, f32 z, f32 w) {
+  quat r;
+  r.x = x;
+  r.y = y;
+  r.z = z;
+  r.w = w;
+  return r;
+}
+
+#define quat_identity Q(0, 0, 0, 1);
 
 //
 // scalar operations
@@ -188,7 +211,7 @@ magnitude3(v3 a) {
 }
 
 static inline v3 
-normalize3(v3 a) {
+unit3(v3 a) {
   return mul3(a, (1.0f / magnitude3(a)));
 }
 
@@ -212,6 +235,50 @@ static inline v3
 lerp3(v3 a, f32 t, v3 b) {
   v3 r = add3(mul3(a, (1.0f - t)), mul3(b, t));
   return r;
+}
+
+//
+// quaternion operations
+//
+
+static inline quat 
+angle_axis(f32 angle, v3 axis) {
+  quat q = {};
+  f32 s = sinf(angle * 0.5f);
+  q.x = axis.x * s;
+  q.y = axis.y * s;
+  q.z = axis.z * s;
+  q.w = cosf(angle * 0.5f);
+  return q;
+}
+
+//
+// m3x3 operations
+//
+
+// TODO: Make this fast!
+static inline v3
+mul3x3(m3x3 m, v3 v) {
+  v3 r;
+  for (int col=0; col < 3; col++) {
+    f32 sum = 0;
+    for (int row=0; row < 3; row++) {
+      sum += m.e[row][col] * v.e[row];
+    }
+    r.e[col] = sum;
+  }
+  return r;
+}
+
+m3x3 rot3xy(f32 pitch, f32 yaw) {
+  v2 c = V2(cosf(pitch), cosf(yaw));
+  v2 s = V2(sinf(pitch), sinf(yaw));
+
+  return (m3x3){
+		c.y      ,  0.0, -s.y      ,
+		s.y * s.x,  c.x,  c.y * s.x,
+		s.y * c.x, -s.x,  c.y * c.x,
+  };
 }
 
 //

@@ -5,13 +5,70 @@
 
 #include "types.h"
 #include "cave_math.h"
-// #include "game.h"
+#include "app.h"
+#include "game.h"
+#include "game.c"
 #include "shader_types.h"
 
 // TODO: Pass this into the application delegate
 static int initial_window_width = 840;
 static int initial_window_height = 480;
 static const char* window_title = "app";
+static app_t app = {};
+static world_t world = {};
+
+static void update_button(button_t* button, bool down) {
+  bool was_down = button->down;
+  button->down = down;
+  button->pressed += down && !was_down;
+  button->released += !down && was_down;
+}
+
+static void reset_button(button_t* button) {
+  button->pressed = 0;
+  button->released = 0;
+}
+
+static void init_clocks(void) {
+  mach_timebase_info_data_t info;
+  mach_timebase_info(&info);
+
+  u64 freq = info.denom;
+  freq *= 1000000000;
+  freq /= info.numer;
+  app.clocks.ticks_per_sec = freq;
+  app.clocks.start_ticks = mach_absolute_time();
+}
+
+static void update_clocks(void) {
+  u64 ticks = mach_absolute_time() - app.clocks.start_ticks;
+  app.clocks.delta_ticks = (int)(ticks - app.clocks.ticks);
+  app.clocks.ticks = ticks;
+
+  app.clocks.delta_secs = (f32)app.clocks.delta_ticks / (f32)app.clocks.ticks_per_sec;
+}
+
+vector_float3 v3_to_float3(v3 a) {
+  return (vector_float3){a.x, a.y, a.z};
+}
+
+static void update_render_camera(camera_t* c, float aspect, render_camera_t* r) {
+  float theta = c->vfov * M_PI / 180;
+  float half_height = tanf(theta/2);
+  float half_width = aspect * half_height;
+  v3 w = unit3(sub3(c->target, c->position));
+  v3 u = unit3(cross3(c->up, w));
+  v3 v = cross3(w, u);
+
+  v3 ll1 = sub3(c->position, mul3(u, half_width));
+  v3 ll2 = sub3(ll1, mul3(v, half_height));
+  v3 ll3 = add3(ll2, w);
+
+  r->position = v3_to_float3(c->position);
+  r->film_h = v3_to_float3(mul3(u, 2*half_width));
+  r->film_v = v3_to_float3(mul3(v, 2*half_height));
+  r->film_lower_left = v3_to_float3(ll3);
+}
 
 static int aligned_size(int sz) {
   return (sz + 0xFF) & ~0xFF;
@@ -121,6 +178,7 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 
   mtl_device = MTLCreateSystemDefaultDevice();
   mtk_view = [[MetalKitView alloc] initWithDevice:mtl_device];
+  [window makeFirstResponder:mtk_view];
 
   [window setContentView:mtk_view];
   // [[mtk_view layer] setMagnificationFilter:kCAFilterNearest];
@@ -139,12 +197,12 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 }
 
 // TODO: Implement these!
-- (void)windowDidResize:(NSNotification*)notification {}
-- (void)windowDidMove:(NSNotification*)notification {}
-- (void)windowDidMiniaturize:(NSNotification*)notification {}
-- (void)windowDidDeminiaturize:(NSNotification*)notification {}
-- (void)windowDidBecomeKey:(NSNotification*)notification {}
-- (void)windowDidResignKey:(NSNotification*)notification {}
+// - (void)windowDidResize:(NSNotification*)notification {}
+// - (void)windowDidMove:(NSNotification*)notification {}
+// - (void)windowDidMiniaturize:(NSNotification*)notification {}
+// - (void)windowDidDeminiaturize:(NSNotification*)notification {}
+// - (void)windowDidBecomeKey:(NSNotification*)notification {}
+// - (void)windowDidResignKey:(NSNotification*)notification {}
 @end
 
 @implementation MetalKitView
@@ -153,29 +211,22 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   id<MTLRenderPipelineState> _standard_pso;
 
   fs_params_t fs_params;
-
-  f64 mach_to_ms;
-  u64 last_time;
-  f64 delta_time;
 }
 
 -(nonnull instancetype)initWithDevice:(nonnull id<MTLDevice>)device {
   self = [super init];
   if (self) {
     [self setDevice: device];
-    [self _setupTimer];
+    [self _setupApp];
     [self _setupMetal];
     // [self _loadAssets];
   }
   return self;
 }
 
-- (void)_setupTimer {
-  mach_timebase_info_data_t info;
-  mach_timebase_info(&info);
-  mach_to_ms = (f64)info.numer / (f64)info.denom * 1e-6;
-  last_time = mach_absolute_time();
-  delta_time = 1.0f/60.0f;
+- (void)_setupApp {
+  init_clocks();
+  init_world(&app, &world);
 }
 
 - (void)_setupMetal {
@@ -214,6 +265,10 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   return YES;
 }
 
+- (BOOL)canBecomeKeyView {
+  return YES;
+}
+
 - (BOOL)canBecomeKey {
   return YES;
 }
@@ -223,13 +278,22 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 }
 
 - (void)keyDown:(NSEvent*)event {
-  // TODO: Input handling 
+  u8 code = [event keyCode];
+  update_button(&app.keys[code], true);
+}
+
+- (void)keyUp:(NSEvent*)event {
+  u8 code = [event keyCode];
+  update_button(&app.keys[code], false);
 }
 
 - (void)drawRect:(CGRect)rect {
   CGSize s = [self drawableSize];
-  fs_params.viewport.x = s.width;
-  fs_params.viewport.y = s.height;
+  float aspect = s.width/s.height;
+
+  update_clocks();
+  update_and_render(&app, &world);
+  update_render_camera(&world.camera, aspect, &fs_params.camera);
 
   id<MTLTexture> texture = [[self currentDrawable] texture];
   MTLRenderPassDescriptor *pass = [self currentRenderPassDescriptor];
@@ -258,11 +322,10 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   [command_buffer presentDrawable:[self currentDrawable]];
   [command_buffer commit];
 
-  // Update timer
-  u64 new_time = mach_absolute_time();
-  delta_time = (new_time - last_time) * mach_to_ms;
-  last_time = mach_absolute_time();
-  // printf("time: %f\n", delta_time);
+  // Reset keys
+  for (int i=0; i < NUMBER_OF_KEYS; i++) {
+    reset_button(&app.keys[i]);
+  }
 }
 @end
 
