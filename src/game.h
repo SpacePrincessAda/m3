@@ -13,6 +13,7 @@ typedef struct camera_state_t {
   v3 target;
   float yaw;
   float pitch;
+  float zoom;
   float vfov;
 } camera_state_t;
 
