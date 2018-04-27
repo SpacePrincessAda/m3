@@ -25,6 +25,7 @@ void update_and_render(app_t* app, world_t *world) {
 
   if (app->keys[KEY_O].pressed) {
     world->enable_fp_cam = !world->enable_fp_cam;
+    printf("switched to %s camera\n", world->enable_fp_cam ? "fp" : "orbit");
   }
 
   // Strafe
