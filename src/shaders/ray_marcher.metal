@@ -65,7 +65,6 @@ float3 mod(float3 x, float y) {
 }
 
 float scene(float3 p) {
-  float3 qos = float3(fract(p.x+0.5)-0.5, p.yz);
   float plane = sd_plane(p);
   float sphere = sd_sphere(p-float3(0,2.5,0), 0.3);
   float box = sd_box(p-float3(0,1,0), float3(1,1,1));
