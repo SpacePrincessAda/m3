@@ -135,6 +135,8 @@ fragment float4 screen_fs_main(screen_vert_t i [[stage_in]], constant fs_params_
   render_camera_t camera = rp.camera;
 
   float3 color(0);
+
+  // Superficially, this seems like a decent source of entropy...
   uint32_t ix = (uint32_t)i.pos.x;
   uint32_t iy = (uint32_t)i.pos.y;
   uint rng = wang_hash(((ix*1973) + (iy*9277) + (rp.frame_count*26699))|1);
@@ -143,8 +145,6 @@ fragment float4 screen_fs_main(screen_vert_t i [[stage_in]], constant fs_params_
   ray_t ray = ray_from_camera(camera, i.uv.x, i.uv.y);
   color = render(ray.o, normalize(ray.d), rng);
 #else
-  // Superficially, this seems like a decent source of entropy...
-
   // normalized pixel size
   float psx = 1/float(rp.viewport_size.x);
   float psy = 1/float(rp.viewport_size.y);
