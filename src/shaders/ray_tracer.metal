@@ -42,7 +42,6 @@ constant float3 sphere_colors[] = {
 #define SAMPLES_PER_PIXEL 4
 constant int MAX_BOUNCES = 2;
 constant float SPP_MOD = 1.0 / float(SAMPLES_PER_PIXEL);
-constant float3 LIGHT_DIRECTION = normalize(float3(2.0, 5.0, 3.0));
 
 float3 point_on_ray(float3 ro, float3 rd, float t) {
   return ro + t*rd;
