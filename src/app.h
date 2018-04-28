@@ -145,6 +145,7 @@ typedef struct clocks_t {
   float delta_secs;
 
   u64 ticks;
+  u32 frame_count;
 
   u64 ticks_per_sec;
   u64 start_ticks;

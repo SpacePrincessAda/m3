@@ -42,6 +42,8 @@ static void init_clocks(void) {
   freq /= info.numer;
   app.clocks.ticks_per_sec = freq;
   app.clocks.start_ticks = mach_absolute_time();
+
+  app.clocks.frame_count = 0;
 }
 
 static void update_clocks(void) {
@@ -50,6 +52,8 @@ static void update_clocks(void) {
   app.clocks.ticks = ticks;
 
   app.clocks.delta_secs = (f32)app.clocks.delta_ticks / (f32)app.clocks.ticks_per_sec;
+
+  app.clocks.frame_count++;
 }
 
 vector_float3 v3_to_float3(v3 a) {
@@ -61,6 +65,7 @@ static void update_render_camera(camera_t* c, float aspect, render_camera_t* r) 
   float half_height = tanf(theta/2);
   float half_width = aspect * half_height;
   v3 w = unit3(sub3(c->target, c->position));
+  // v3 w = unit3(sub3(c->position, c->target));
   v3 u = unit3(cross3(c->up, w));
   v3 v = cross3(w, u);
 
@@ -327,6 +332,10 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   update_clocks();
   update_and_render(&app, &world);
   update_render_camera(&world.camera, aspect, &fs_params.camera);
+
+  fs_params.frame_count = app.clocks.frame_count;
+  fs_params.viewport_size.x = s.width;
+  fs_params.viewport_size.y = s.height;
 
   id<MTLTexture> texture = [[self currentDrawable] texture];
   MTLRenderPassDescriptor *pass = [self currentRenderPassDescriptor];

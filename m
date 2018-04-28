@@ -16,6 +16,10 @@ CTIME_EXEC="utils/ctime"
 CTIME_SOURCE="utils/ctime.c"
 CTIME_TIMING_FILE=".build.ctm"
 
+MTL_C="xcrun -sdk macosx metal"
+MTL_C_FLAGS="-Wno-unused-variable -mmacosx-version-min=10.11 -std=osx-metal1.1"
+MTLLIB_C="xcrun -sdk macosx metallib"
+
 # Abort on first error
 set -e
 
@@ -38,8 +42,10 @@ $CTIME_EXEC -begin "$CTIME_TIMING_FILE"
 mkdir -p $BUILD
 
 # compile shader library
-xcrun -sdk macosx metal -Wno-unused-variable -mmacosx-version-min=10.11 -std=osx-metal1.1 $SRC/shaders/standard.metal -o $BUILD/standard.air
-xcrun -sdk macosx metallib $BUILD/standard.air -o $BUILD/standard.metallib
+$MTL_C $MTL_C_FLAGS $SRC/shaders/ray_marcher.metal -o $BUILD/standard.air
+# $MTL_C $MTL_C_FLAGS $SRC/shaders/path_tracer.metal -o $BUILD/standard.air
+# $MTL_C $MTL_C_FLAGS $SRC/shaders/ray_tracer.metal -o $BUILD/standard.air
+$MTLLIB_C $BUILD/*.air -o $BUILD/standard.metallib
 
 # compile executable
 $CXX -include-pch $PCH_OUT -g $CXX_FLAGS $OSX_FLAGS "$SRC/$ENTRY" -o "$BUILD/$APP"
