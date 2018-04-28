@@ -19,6 +19,7 @@ constant float MAX_DIST = 40.0;
 constant float3 LIGHT_POSITION = float3(2.0, 5.0, 3.0);
 
 #define RENDER_NORMALS 0
+#define ENABLE_SHADOWS 1
 
 float radians(float degrees) {
   return degrees * (M_PI_F / 180.0);
@@ -141,7 +142,11 @@ float3 render(float3 ro, float3 rd) {
     
     // light
     float3 light = normalize(LIGHT_POSITION);
+#if ENABLE_SHADOWS
     float shadow = calc_hard_shadow(p, light, 0.01, 3.0);
+#else
+    float shadow = 1;
+#endif
     // float shadow = calc_soft_shadow(p, light, 0.01, 3.0);
 #if RENDER_NORMALS
     color = (n * 0.5 + 0.5) * shadow;
