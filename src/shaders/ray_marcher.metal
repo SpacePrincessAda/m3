@@ -111,10 +111,13 @@ float3 mod(float3 x, float y) {
 
 float scene(float3 p) {
 #if SCENE_INDEX == 0
+  float box = sd_box(p-float3(0,1,0), float3(1,1,1));
+  return box;
+#elif SCENE_INDEX == 1
   float box = sd_box(p, float3(1,1,1));
   float sphere = sd_sphere(p, 1.2);
   return intersect(box, sphere);
-#elif SCENE_INDEX == 1
+#elif SCENE_INDEX == 2
   float box = sd_box(p, float3(1,2,1));
   float sphere = sd_sphere(p-float3(0,2.5,0), 0.3);
   float plane = sd_plane(p, float3(0,1,0), 0.5);
