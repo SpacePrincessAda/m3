@@ -2,8 +2,9 @@
 #include "game.h"
 #include "types.h"
 #include "cave_math.h"
+#include "debug_params.h"
 
-void init_world(app_t* app, world_t *world) {
+void init_world(app_t* app, world_t* world) {
   world->orbit_cam.target = V3(0,1,0);
   world->orbit_cam.zoom = 10;
   world->orbit_cam.vfov = 45;
@@ -16,9 +17,20 @@ void init_world(app_t* app, world_t *world) {
   world->camera.up = V3(0,1,0);
 }
 
-void update_and_render(app_t* app, world_t *world) {
+void update_and_render(app_t* app, world_t* world, debug_params_t* debug_params) {
   // printf("%f\n", app->clocks.delta_secs);
   float dt = app->clocks.delta_secs;
+
+  // DEBUG PARAMS
+  if (app->keys[KEY_MINUS].down) {
+    debug_params->scalars[0] -= 1.0f*dt;
+  }
+  if (app->keys[KEY_EQUALS].down) {
+    debug_params->scalars[0] += 1.0f*dt;
+  }
+  if (app->keys[KEY_0].pressed) {
+    debug_params->scalars[0] = 0;
+  }
 
   if (app->keys[KEY_O].pressed) {
     world->enable_fp_cam = !world->enable_fp_cam;

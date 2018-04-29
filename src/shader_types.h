@@ -1,4 +1,5 @@
 #pragma once
+#include "debug_params.h"
 
 typedef struct render_camera_t {
   vector_float3 position;
@@ -11,5 +12,6 @@ typedef struct fs_params_t {
   render_camera_t camera;
   uint32_t frame_count;
   vector_float2 viewport_size;
+  debug_params_t debug_params;
 } fs_params_t;
 

@@ -330,7 +330,7 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   float aspect = s.width/s.height;
 
   update_clocks();
-  update_and_render(&app, &world);
+  update_and_render(&app, &world, &fs_params.debug_params);
   update_render_camera(&world.camera, aspect, &fs_params.camera);
 
   fs_params.frame_count = app.clocks.frame_count;

@@ -18,8 +18,49 @@ constant float MIN_DIST = 1.0;
 constant float MAX_DIST = 40.0;
 constant float3 LIGHT_POSITION = float3(2.0, 5.0, 3.0);
 
+#define SCENE_INDEX 0
 #define RENDER_NORMALS 0
 #define ENABLE_SHADOWS 1
+#define ENABLE_DF_PLANE 1
+
+//
+// Distance Field Debug Plane
+//
+
+float3 fusion(float x) {
+	float t = clamp(x,0.0,1.0);
+	return clamp(float3(sqrt(t), t*t*t, max(sin(M_PI_F*1.75*t), pow(t, 12.0))), 0.0, 1.0);
+}
+
+float3 distance_meter(float dist, float ray_length, float3 ray_dir, float cam_height) {
+  float ideal_grid_distance = 20.0/ray_length*pow(abs(ray_dir.y),0.8);
+  float nearest_base = floor(log(ideal_grid_distance)/log(10.));
+  float relative_dist = abs(dist/cam_height);
+  
+  float larger_distance = pow(10.0,nearest_base+1.);
+  float smaller_distance = pow(10.0,nearest_base);
+
+ 
+  float3 col = fusion(log(1.+relative_dist));
+  col = max(float3(0.),col);
+  if (sign(dist) < 0.) {
+    col = col.grb*3.;
+  }
+
+  float l0 = (pow(0.5+0.5*cos(dist*M_PI_F*2.*smaller_distance),10.0));
+  float l1 = (pow(0.5+0.5*cos(dist*M_PI_F*2.*larger_distance),10.0));
+  
+  float x = fract(log(ideal_grid_distance)/log(10.));
+  l0 = mix(l0,0.,smoothstep(0.5,1.0,x));
+  l1 = mix(0.,l1,smoothstep(0.0,0.5,x));
+
+  col.rgb *= 0.1+0.9*(1.-l0)*(1.-l1);
+  return col;
+}
+
+//
+//
+//
 
 float radians(float degrees) {
   return degrees * (M_PI_F / 180.0);
@@ -30,7 +71,11 @@ float sd_box(float3 p, float3 b) {
   return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,0.0));
 }
 
-float sd_plane(float3 p) {
+float sd_plane(float3 p, float3 n, float dist) {
+  return dot(p, n) + dist;
+}
+
+float ud_plane(float3 p) {
   return p.y;
 }
 
@@ -65,10 +110,18 @@ float3 mod(float3 x, float y) {
 }
 
 float scene(float3 p) {
-  float plane = sd_plane(p);
+#if SCENE_INDEX == 0
+  float box = sd_box(p, float3(1,1,1));
+  float sphere = sd_sphere(p, 1.2);
+  return intersect(box, sphere);
+#elif SCENE_INDEX == 1
+  float box = sd_box(p, float3(1,2,1));
   float sphere = sd_sphere(p-float3(0,2.5,0), 0.3);
-  float box = sd_box(p-float3(0,1,0), float3(1,1,1));
+  float plane = sd_plane(p, float3(0,1,0), 0.5);
   return smin(plane, join(box, sphere), 1.5);
+#else
+  return 0;
+#endif
 }
 
 float3 calc_normal(float3 p) {
@@ -131,12 +184,25 @@ float cast_ray(float3 ro, float3 rd) {
   return t;
 }
 
-float3 render(float3 ro, float3 rd) {
+float3 render(float3 ro, float3 rd, render_camera_t camera, debug_params_t debug_params) {
   float3 color = float3(0);
   float t = cast_ray(ro, rd);
+  float3 p = ro + t*rd;
+
+#if ENABLE_DF_PLANE == 1
+  float df_plane_y = debug_params.scalars[0];
+  if (p.y <= df_plane_y || t<-0.5) {
+    float ray_length = INFINITY;
+    if (rd.y < 0.0) {
+      ray_length = (ro.y-df_plane_y)/-rd.y;
+    }
+    float dist = scene(ro+rd*ray_length);
+    float3 field_color = distance_meter(dist, ray_length, rd, camera.position.y-df_plane_y);
+    return field_color;
+  }
+#endif
 
   if (t>-0.5) {
-    float3 p = ro + t*rd;
     float3 n = calc_normal(p);
     
     // light
@@ -182,7 +248,7 @@ fragment float4 screen_fs_main(screen_vert_t i [[stage_in]], constant fs_params_
   render_camera_t camera = rp.camera;
   ray_t ray = ray_from_camera(camera, i.uv.x, i.uv.y);
 
-  float3 color = render(ray.o, normalize(ray.d));
+  float3 color = render(ray.o, normalize(ray.d), camera, rp.debug_params);
   return float4(color, 1);
 }
 
