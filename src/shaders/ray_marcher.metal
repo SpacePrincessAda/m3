@@ -25,6 +25,7 @@ constant float3 LIGHT_POSITION = float3(2.0, 5.0, 3.0);
 
 //
 // Distance Field Debug Plane
+// Thank you Mercury: https://www.shadertoy.com/view/ldK3zD
 //
 
 float3 fusion(float x) {
