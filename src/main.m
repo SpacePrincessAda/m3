@@ -203,6 +203,11 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   // [[mtk_view layer] setMagnificationFilter:kCAFilterNearest];
 
   [window makeKeyAndOrderFront:nil];
+  
+  NSAppearance* appearance = [NSAppearance appearanceNamed: 
+         [NSUserDefaults.standardUserDefaults stringForKey:@"AppleInterfaceStyle"] ? NSAppearanceNameVibrantDark : NSAppearanceNameVibrantLight];
+  [window setAppearance:appearance];
+  [appearance release];
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
