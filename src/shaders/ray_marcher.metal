@@ -18,7 +18,7 @@ constant float MIN_DIST = 1.0;
 constant float MAX_DIST = 40.0;
 constant float3 LIGHT_POSITION = float3(2.0, 5.0, 3.0);
 
-#define SCENE_INDEX 0
+#define SCENE_INDEX 3
 #define RENDER_NORMALS 0
 #define ENABLE_SHADOWS 1
 #define ENABLE_DF_PLANE 1
@@ -69,7 +69,7 @@ float radians(float degrees) {
 
 float sd_box(float3 p, float3 b) {
   float3 d = abs(p) - b;
-  return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,0.0));
+  return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,float3(0)));
 }
 
 float sd_plane(float3 p, float3 n, float dist) {
@@ -82,6 +82,16 @@ float ud_plane(float3 p) {
 
 float sd_sphere(float3 p, float r) {
   return length(p) - r;
+}
+
+float sd_tri_prism(float3 p, float2 h) {
+  float3 q = abs(p);
+  return max(q.z-h.y,max(q.x*0.866025+p.y*0.5,-p.y)-h.x*0.5);
+}
+
+float sd_torus(float3 p, float2 t) {
+  float2 q = float2(length(p.xz)-t.x,p.y);
+  return length(q)-t.y;
 }
 
 float intersect(float a, float b) {
@@ -101,11 +111,6 @@ float smin(float a, float b, float k) {
   return mix(b, a, h) - k*h*(1.0-h);
 }
 
-float sd_torus(float3 p, float2 t) {
-  float2 q = float2(length(p.xz)-t.x,p.y);
-  return length(q)-t.y;
-}
-
 float3 mod(float3 x, float y) {
   return x - y * floor(x/y);
 }
@@ -123,6 +128,9 @@ float scene(float3 p) {
   float sphere = sd_sphere(p-float3(0,2.5,0), 0.3);
   float plane = sd_plane(p, float3(0,1,0), 0.5);
   return smin(plane, join(box, sphere), 1.5);
+#elif SCENE_INDEX == 3
+  float prism = sd_tri_prism(p-float3(0,1,0), float2(2,1));
+  return prism;
 #else
   return 0;
 #endif
