@@ -18,7 +18,7 @@ constant float MIN_DIST = 1.0;
 constant float MAX_DIST = 40.0;
 constant float3 LIGHT_POSITION = float3(2.0, 5.0, 3.0);
 
-#define SCENE_INDEX 3
+#define SCENE_INDEX 4
 #define RENDER_NORMALS 0
 #define ENABLE_SHADOWS 1
 #define ENABLE_DF_PLANE 1
@@ -131,6 +131,10 @@ float scene(float3 p) {
 #elif SCENE_INDEX == 3
   float prism = sd_tri_prism(p-float3(0,1,0), float2(2,1));
   return prism;
+#elif SCENE_INDEX == 4
+  float prism = sd_tri_prism(p, float2(1,1));
+  float sphere = sd_sphere(p-float3(0,1,0), 0.5);
+  return subtract(sphere, prism);
 #else
   return 0;
 #endif
