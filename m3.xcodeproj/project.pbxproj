@@ -6,15 +6,10 @@
 	objectVersion = 48;
 	objects = {
 
-/* Begin PBXFileReference section */
-		83480A8B208FAFF300D23365 /* m3 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = m3; sourceTree = "<group>"; };
-/* End PBXFileReference section */
-
 /* Begin PBXGroup section */
 		83480A84208FAF3B00D23365 = {
 			isa = PBXGroup;
 			children = (
-				83480A8B208FAFF300D23365 /* m3 */,
 			);
 			sourceTree = "<group>";
 		};
