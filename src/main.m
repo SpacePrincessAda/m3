@@ -277,7 +277,9 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 - (void)_createPSO {
   @autoreleasepool {
     if (_standard_pso) {
+      // NOTE: Make sure to release all PSOs that used the library here
       [_standard_pso release];
+      [_dynamic_res_pso release];
     }
 
     // Load shaders
@@ -301,6 +303,9 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
       if (!_standard_pso) {
         NSLog(@"Error occurred when creating render pipeline state: %@", error);
       }
+      [vertex_func release];
+      [fragment_func release];
+      [psd release];
     }
 
     // Dynamic Resolution PSO
@@ -319,7 +324,13 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
       if (!_dynamic_res_pso) {
         NSLog(@"Error occurred when creating render pipeline state: %@", error);
       }
+      [vertex_func release];
+      [fragment_func release];
+      [psd release];
     }
+
+    [library release];
+    library = nil;
   }
 }
 
