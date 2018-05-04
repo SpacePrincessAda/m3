@@ -19,7 +19,7 @@ void init_world(app_t* app, world_t* world) {
 
 void update_and_render(app_t* app, world_t* world, debug_params_t* debug_params) {
   // printf("%f\n", app->clocks.delta_secs);
-  float dt = app->clocks.delta_secs;
+  f32 dt = app->clocks.delta_secs;
 
   // DEBUG PARAMS
   if (app->keys[KEY_MINUS].down) {
@@ -69,8 +69,8 @@ void update_and_render(app_t* app, world_t* world, debug_params_t* debug_params)
   }
 
   // Look horizontal
-  float yaw = 0;
-  float pitch = 0;
+  f32 yaw = 0;
+  f32 pitch = 0;
   if (app->keys[KEY_LEFT].down) {
     yaw -= 2.0f * dt;
   }

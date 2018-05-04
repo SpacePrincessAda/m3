@@ -142,7 +142,7 @@ typedef struct button_t {
 
 typedef struct clocks_t {
   int delta_ticks;
-  float delta_secs;
+  f32 delta_secs;
 
   u64 ticks;
   u32 frame_count;

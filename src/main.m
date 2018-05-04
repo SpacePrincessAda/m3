@@ -60,10 +60,10 @@ vector_float3 v3_to_float3(v3 a) {
   return (vector_float3){a.x, a.y, a.z};
 }
 
-static void update_render_camera(camera_t* c, float aspect, render_camera_t* r) {
-  float theta = c->vfov * M_PI / 180;
-  float half_height = tanf(theta/2);
-  float half_width = aspect * half_height;
+static void update_render_camera(camera_t* c, f32 aspect, render_camera_t* r) {
+  f32 theta = c->vfov * M_PI / 180;
+  f32 half_height = tanf(theta/2);
+  f32 half_width = aspect * half_height;
   v3 w = unit3(sub3(c->target, c->position));
   v3 u = unit3(cross3(c->up, w));
   v3 v = cross3(w, u);

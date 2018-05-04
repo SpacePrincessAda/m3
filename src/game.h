@@ -5,16 +5,16 @@ typedef struct camera_t {
   v3 position;
   v3 target;
   v3 up;
-  float vfov;
+  f32 vfov;
 } camera_t;
 
 typedef struct camera_state_t {
   v3 position;
   v3 target;
-  float yaw;
-  float pitch;
-  float zoom;
-  float vfov;
+  f32 yaw;
+  f32 pitch;
+  f32 zoom;
+  f32 vfov;
 } camera_state_t;
 
 typedef struct world_t {
