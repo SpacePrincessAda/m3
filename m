@@ -45,6 +45,7 @@ mkdir -p $BUILD
 $MTL_C $MTL_C_FLAGS $SRC/shaders/ray_marcher.metal -o $BUILD/standard.air
 # $MTL_C $MTL_C_FLAGS $SRC/shaders/path_tracer.metal -o $BUILD/standard.air
 # $MTL_C $MTL_C_FLAGS $SRC/shaders/ray_tracer.metal -o $BUILD/standard.air
+$MTL_C $MTL_C_FLAGS $SRC/shaders/dynamic_resolution.metal -o $BUILD/dynamic_resolution.air
 $MTLLIB_C $BUILD/*.air -o $BUILD/standard.metallib
 
 # compile executable

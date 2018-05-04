@@ -15,3 +15,7 @@ typedef struct fs_params_t {
   debug_params_t debug_params;
 } fs_params_t;
 
+typedef struct dr_params_t {
+  vector_float2 osb_to_rt_ratio;
+} dr_params_t;
+

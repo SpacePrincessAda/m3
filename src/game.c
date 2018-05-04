@@ -32,6 +32,20 @@ void update_and_render(app_t* app, world_t* world, debug_params_t* debug_params)
     debug_params->scalars[0] = 0;
   }
 
+  // Render scale
+  f32 render_scale = app->render_scale;
+  if (app->keys[KEY_LEFTBRACKET].pressed) {
+    render_scale *= 0.5f;
+  }
+  if (app->keys[KEY_RIGHTBRACKET].pressed) {
+    render_scale *= 2.0f;
+  }
+  render_scale = clamp(0.0625, render_scale, 1.0);
+  if (render_scale != app->render_scale) {
+    app->render_scale = render_scale;
+    printf("render scale: %0.02f%%\n", 100.0*app->render_scale);
+  }
+
   if (app->keys[KEY_O].pressed) {
     world->enable_fp_cam = !world->enable_fp_cam;
     printf("switched to %s camera\n", world->enable_fp_cam ? "fp" : "orbit");

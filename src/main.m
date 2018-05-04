@@ -65,7 +65,6 @@ static void update_render_camera(camera_t* c, float aspect, render_camera_t* r) 
   float half_height = tanf(theta/2);
   float half_width = aspect * half_height;
   v3 w = unit3(sub3(c->target, c->position));
-  // v3 w = unit3(sub3(c->position, c->target));
   v3 u = unit3(cross3(c->up, w));
   v3 v = cross3(w, u);
 
@@ -200,7 +199,6 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   mtk_view = [[MetalKitView alloc] initWithDevice:mtl_device];
 
   [window setContentView:mtk_view];
-  // [[mtk_view layer] setMagnificationFilter:kCAFilterNearest];
 
   [window makeKeyAndOrderFront:nil];
   
@@ -233,8 +231,11 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 {
   id<MTLCommandQueue> _command_queue;
   id<MTLRenderPipelineState> _standard_pso;
+  id<MTLRenderPipelineState> _dynamic_res_pso;
+  id<MTLTexture> _offscreen_buffer;
 
   fs_params_t fs_params;
+  dr_params_t dr_params;
 
   time_t shader_lib_ts;
 }
@@ -250,47 +251,86 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 }
 
 - (void)_setupApp {
+  // TODO: Query for these
+  app.render_scale = 1.0f;
   init_clocks();
   init_world(&app, &world);
 }
 
+- (void)_createOffscreenBuffer {
+  if (_offscreen_buffer) {
+    [_offscreen_buffer release];
+  }
+
+  MTLTextureDescriptor *td = [MTLTextureDescriptor
+    texture2DDescriptorWithPixelFormat: self.colorPixelFormat
+                                 width: app.display.size_in_pixels.x
+                                height: app.display.size_in_pixels.y
+                             mipmapped: NO
+  ];
+  [td setUsage: MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead];
+  [td setStorageMode: MTLStorageModePrivate];
+
+  _offscreen_buffer = [self.device newTextureWithDescriptor:td];
+}
+
 - (void)_createPSO {
-  if (_standard_pso) {
-    [_standard_pso release];
+  @autoreleasepool {
+    if (_standard_pso) {
+      [_standard_pso release];
+    }
+
+    // Load shaders
+    id<MTLLibrary> library = load_shader_library(self.device, shader_lib_path);
+
+    // Standard PSO
+    {
+      id<MTLFunction> vertex_func = [library newFunctionWithName:@"screen_vs_main"];
+      id<MTLFunction> fragment_func = [library newFunctionWithName:@"screen_fs_main"];
+
+      MTLRenderPipelineDescriptor *psd = [MTLRenderPipelineDescriptor new];
+      psd.label = @"Offscreen Pipeline";
+      psd.vertexFunction = vertex_func;
+      psd.fragmentFunction = fragment_func;
+      psd.colorAttachments[0].pixelFormat = self.colorPixelFormat;
+      // psd.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+      // psd.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+
+      NSError *error = nil;
+      _standard_pso = [self.device newRenderPipelineStateWithDescriptor:psd error:&error];
+      if (!_standard_pso) {
+        NSLog(@"Error occurred when creating render pipeline state: %@", error);
+      }
+    }
+
+    // Dynamic Resolution PSO
+    {
+      id<MTLFunction> vertex_func = [library newFunctionWithName:@"dr_vs_main"];
+      id<MTLFunction> fragment_func = [library newFunctionWithName:@"dr_fs_main"];
+
+      MTLRenderPipelineDescriptor *psd = [MTLRenderPipelineDescriptor new];
+      psd.label = @"Dynamic Resolution Pipeline";
+      psd.vertexFunction = vertex_func;
+      psd.fragmentFunction = fragment_func;
+      psd.colorAttachments[0].pixelFormat = self.colorPixelFormat;
+
+      NSError *error = nil;
+      _dynamic_res_pso = [self.device newRenderPipelineStateWithDescriptor:psd error:&error];
+      if (!_dynamic_res_pso) {
+        NSLog(@"Error occurred when creating render pipeline state: %@", error);
+      }
+    }
   }
-
-  // Load shaders
-  id<MTLLibrary> library = load_shader_library(self.device, shader_lib_path);
-  id<MTLFunction> vertex_func = [library newFunctionWithName:@"screen_vs_main"];
-  id<MTLFunction> fragment_func = [library newFunctionWithName:@"screen_fs_main"];
-
-  // PSO
-  MTLRenderPipelineDescriptor *psd = [MTLRenderPipelineDescriptor new];
-  psd.label = @"Standard Pipeline";
-  psd.vertexFunction = vertex_func;
-  psd.fragmentFunction = fragment_func;
-  psd.colorAttachments[0].pixelFormat = self.colorPixelFormat;
-  psd.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-  psd.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-
-  NSError *error = nil;
-  _standard_pso = [self.device newRenderPipelineStateWithDescriptor:psd error:&error];
-  if (!_standard_pso) {
-    NSLog(@"Error occurred when creating render pipeline state: %@", error);
-  }
-  [psd release];
-  [vertex_func release];
-  [fragment_func release];
-  [library release];
 }
 
 - (void)_setupMetal {
   [self setPreferredFramesPerSecond:60];
   [self setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
-  [self setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
+  // [self setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
   [self setSampleCount:1];
 
   _command_queue = [self.device newCommandQueue];
+  [self _updateWindowAndDisplaySize];
 }
 
 - (BOOL)isOpaque {
@@ -319,6 +359,49 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   update_button(&app.keys[code], false);
 }
 
+- (void)_updateWindowAndDisplaySize {
+  NSWindow *window = [self window];
+
+  {
+    NSScreen *screen = [window screen];
+    NSRect frame = [screen frame];
+    f32 bsf = [screen backingScaleFactor];
+    v2 screen_size = {
+      .x = frame.size.width,
+      .y = frame.size.height,
+    };
+
+    if (!eq2(screen_size, app.display.size_in_points) || bsf != app.display.scale) {
+      app.display.scale = bsf;
+      app.display.size_in_points = screen_size;
+      app.display.size_in_pixels = mul2(screen_size, bsf);
+      // printf("creating offscreen buffer for %0.0fx%0.0f\n", 
+      //   app.display.size_in_pixels.x, 
+      //   app.display.size_in_pixels.y
+      // );
+      [self _createOffscreenBuffer];
+    }
+  }
+
+  {
+    // NOTE: This is size of the drawable. Do I actually want size of the window (including titlebar)?
+    CGSize s = [self drawableSize];
+    f32 bsf = [window backingScaleFactor];
+    app.window.scale = bsf;
+    app.window.size_in_pixels = (v2){
+      s.width,
+      s.height,
+    };
+    app.window.size_in_points = (v2){
+      s.width / bsf,
+      s.height / bsf,
+    };
+  }
+}
+
+- (void)_updateWindowSize {
+}
+
 - (void)_loadAssets {
   time_t new_shader_lib_ts = get_last_write_time(shader_lib_path);
   if (new_shader_lib_ts != shader_lib_ts) {
@@ -328,50 +411,84 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   }
 }
 
-- (void)drawRect:(CGRect)rect {
-  [self _loadAssets];
-
-  CGSize s = [self drawableSize];
-  float aspect = s.width/s.height;
-
-  update_clocks();
-  update_and_render(&app, &world, &fs_params.debug_params);
-  update_render_camera(&world.camera, aspect, &fs_params.camera);
-
+- (void)_render {
   fs_params.frame_count = app.clocks.frame_count;
-  fs_params.viewport_size.x = s.width;
-  fs_params.viewport_size.y = s.height;
+  fs_params.viewport_size.x = app.window.size_in_pixels.x;
+  fs_params.viewport_size.y = app.window.size_in_pixels.y;
 
-  id<MTLTexture> texture = [[self currentDrawable] texture];
-  MTLRenderPassDescriptor *pass = [self currentRenderPassDescriptor];
-
-  pass.colorAttachments[0].texture = texture;
-  pass.colorAttachments[0].loadAction = MTLLoadActionClear;
-  pass.colorAttachments[0].storeAction = MTLStoreActionStore;
-  pass.colorAttachments[0].clearColor = MTLClearColorMake(0.16f, 0.17f, 0.2f, 1.0f);
+  dr_params.osb_to_rt_ratio.x = (app.window.size_in_pixels.x*app.render_scale) / app.display.size_in_pixels.x;
+  dr_params.osb_to_rt_ratio.y = (app.window.size_in_pixels.y*app.render_scale) / app.display.size_in_pixels.y;
 
   id<MTLCommandBuffer> command_buffer = [_command_queue commandBuffer];
-  id<MTLRenderCommandEncoder> enc = [
-    command_buffer renderCommandEncoderWithDescriptor:pass
-  ];
 
-  [enc setRenderPipelineState:_standard_pso];
-  
-  [enc setFragmentBytes:&fs_params
-                     length:sizeof(fs_params_t)
-                    atIndex:0];
+  // Render to offscreen buffer
+  {
+    MTLRenderPassDescriptor *pass = [self currentRenderPassDescriptor];
+    pass.colorAttachments[0].texture = _offscreen_buffer;
+    pass.colorAttachments[0].loadAction = MTLLoadActionClear;
+    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+    pass.colorAttachments[0].clearColor = MTLClearColorMake(0.16f, 0.17f, 0.2f, 1.0f);
 
-  // Full screen triangle
-  [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    id<MTLRenderCommandEncoder> enc = [command_buffer 
+      renderCommandEncoderWithDescriptor:pass];
+    MTLViewport vp = {
+      .width = app.window.size_in_pixels.x*app.render_scale,
+      .height = app.window.size_in_pixels.y*app.render_scale,
+      .zfar = 1.0,
+    };
+    [enc setViewport:vp];
+    [enc setRenderPipelineState:_standard_pso];
+    [enc setFragmentBytes:&fs_params
+                       length:sizeof(fs_params_t)
+                      atIndex:0];
+    [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [enc endEncoding];
+  }
 
-  [enc endEncoding];
+  // Display from offscreen buffer
+  {
+    id<MTLTexture> texture = [[self currentDrawable] texture];
+    MTLRenderPassDescriptor *pass = [self currentRenderPassDescriptor];
+    pass.colorAttachments[0].texture = texture;
+    pass.colorAttachments[0].loadAction = MTLLoadActionClear;
+    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+    pass.colorAttachments[0].clearColor = MTLClearColorMake(0.16f, 0.17f, 0.2f, 1.0f);
+    id<MTLRenderCommandEncoder> enc = [command_buffer 
+      renderCommandEncoderWithDescriptor:pass];
+    MTLViewport vp = {
+      .width = app.window.size_in_pixels.x,
+      .height = app.window.size_in_pixels.y,
+      .zfar = 1.0,
+    };
+    [enc setViewport:vp];
+    [enc setRenderPipelineState:_dynamic_res_pso];
+    [enc setFragmentTexture:_offscreen_buffer atIndex:0];
+    [enc setFragmentBytes:&dr_params
+                       length:sizeof(dr_params_t)
+                      atIndex:0];
+    [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [enc endEncoding];
 
-  [command_buffer presentDrawable:[self currentDrawable]];
-  [command_buffer commit];
+    [command_buffer presentDrawable:[self currentDrawable]];
+    [command_buffer commit];
+  }
+}
 
-  // Reset keys
-  for (int i=0; i < NUMBER_OF_KEYS; i++) {
-    reset_button(&app.keys[i]);
+- (void)drawRect:(CGRect)rect {
+  @autoreleasepool {
+    [self _updateWindowAndDisplaySize];
+    [self _loadAssets];
+
+    update_clocks();
+    update_and_render(&app, &world, &fs_params.debug_params);
+    update_render_camera(&world.camera, aspect2(app.window.size_in_pixels), &fs_params.camera);
+
+    [self _render];
+
+    // Reset keys
+    for (int i=0; i < NUMBER_OF_KEYS; i++) {
+      reset_button(&app.keys[i]);
+    }
   }
 }
 @end

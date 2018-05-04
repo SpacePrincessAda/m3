@@ -136,6 +136,45 @@ square_root(f32 a) {
   return r;
 }
 
+static inline f32
+clamp(f32 min, f32 value, f32 max) {
+  f32 r = value;
+
+  if (r < min) {
+    r = min;
+  } else if (r > max) {
+    r = max;
+  }
+
+  return r;
+}
+
+static inline f32 
+clamp01(f32 value) {
+  return clamp(0.0f, value, 1.0f);
+}
+
+//
+// V2 operations
+//
+
+static inline bool 
+eq2(v2 a, v2 b) {
+  return a.x == b.x && a.y == b.y;
+}
+
+static inline v2
+mul2(v2 a, f32 f) {
+  v2 r = {};
+  r.x = a.x * f;
+  r.y = a.y * f;
+  return r;
+}
+
+static inline f32
+aspect2(v2 a) {
+  return a.x / a.y;
+}
 
 //
 // V3 operations

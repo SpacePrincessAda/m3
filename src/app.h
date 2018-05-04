@@ -154,13 +154,23 @@ typedef struct clocks_t {
 // typedef struct mouse_t {
 // } mouse_t;
 
-// typedef struct window_t {
-//   v2 size;
-// } window_t;
+typedef struct window_t {
+  v2 size_in_pixels;
+  v2 size_in_points;
+  f32 scale;
+} window_t;
+
+typedef struct display_t {
+  v2 size_in_pixels;
+  v2 size_in_points;
+  f32 scale;
+} display_t;
 
 typedef struct app_t {
-  // window_t window;
+  window_t window;
+  display_t display;
   clocks_t clocks;
   button_t keys[NUMBER_OF_KEYS];
+  f32 render_scale;
 } app_t;
 

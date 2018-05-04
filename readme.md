@@ -18,7 +18,8 @@ Run the build script to live-reload the shaders.
 
 # Controls
 
-Press `o` to switch between orbit and first person cameras.
+- Press `o` to switch between orbit and first person cameras.
+- Press `[` or `]` to change the rendering resolution.
 
 __Orbit Camera__
 
