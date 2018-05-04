@@ -46,7 +46,11 @@ $MTL_C $MTL_C_FLAGS $SRC/shaders/ray_marcher.metal -o $BUILD/standard.air
 # $MTL_C $MTL_C_FLAGS $SRC/shaders/path_tracer.metal -o $BUILD/standard.air
 # $MTL_C $MTL_C_FLAGS $SRC/shaders/ray_tracer.metal -o $BUILD/standard.air
 $MTL_C $MTL_C_FLAGS $SRC/shaders/dynamic_resolution.metal -o $BUILD/dynamic_resolution.air
-$MTLLIB_C $BUILD/*.air -o $BUILD/standard.metallib
+
+# build shader library and move it into place
+# the move is important, otherwise the app might try to load it while it's building
+$MTLLIB_C $BUILD/*.air -o $BUILD/temp.metallib
+mv $BUILD/temp.metallib $BUILD/standard.metallib
 
 # compile executable
 $CXX -include-pch $PCH_OUT -g $CXX_FLAGS $OSX_FLAGS "$SRC/$ENTRY" -o "$BUILD/$APP"
