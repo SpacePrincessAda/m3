@@ -171,6 +171,8 @@ typedef struct mouse_t {
   bool scrolled;
   v2 delta_scroll;
 
+  bool capture;
+
   button_t left_button;
   button_t middle_button; // TODO: Figure out how to handle this in macOS
   button_t right_button;

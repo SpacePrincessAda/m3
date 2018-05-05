@@ -21,19 +21,9 @@ void update_and_render(app_t* app, world_t* world, debug_params_t* debug_params)
   // printf("%f\n", app->clocks.delta_secs);
   f32 dt = app->clocks.delta_secs;
 
-  // if (app->mouse.moved) {
-  //   printf("mouse: %.1f, %.1f\n", app->mouse.position.x, app->mouse.position.y);
-  //   printf("mouse: %.1f, %.1f\n", app->mouse.delta_position.x, app->mouse.delta_position.y);
-  // }
-  // if (app->mouse.scrolled) {
-  //   printf("scroll: %.2f, %.2f\n", app->mouse.delta_scroll.x, app->mouse.delta_scroll.y);
-  // }
-  // if (app->mouse.left_button.pressed) {
-  //   printf("left mouse pressed\n");
-  // }
-  // if (app->mouse.right_button.pressed) {
-  //   printf("right mouse pressed\n");
-  // }
+  if (app->keys[KEY_L].pressed) {
+    app->mouse.capture = !app->mouse.capture;
+  }
 
   // DEBUG PARAMS
   if (app->keys[KEY_MINUS].down) {
@@ -98,6 +88,11 @@ void update_and_render(app_t* app, world_t* world, debug_params_t* debug_params)
   }
   if (app->keys[KEY_UP].down) {
     pitch += 2.0f * dt;
+  }
+
+  if (app->mouse.capture && app->mouse.moved) {
+    yaw += app->mouse.delta_position.x * dt;
+    pitch -= app->mouse.delta_position.y * dt;
   }
 
   // Apply new camera values

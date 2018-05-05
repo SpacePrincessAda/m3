@@ -261,6 +261,9 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 
 - (void)_setupApp {
   app.render_scale = 1.0f;
+
+  // app.mouse.position.x = p.x;
+
   init_clocks();
   init_world(&app, &world);
 }
@@ -371,10 +374,12 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 - (void)mouseMoved:(NSEvent*)event {
   app.mouse.moved = true;
   NSPoint location = [event locationInWindow];
-  app.mouse.delta_position.x = [event deltaX];
-  app.mouse.delta_position.y = [event deltaY];
-  app.mouse.position.x = location.x;
-  app.mouse.position.y = app.window.size_in_points.y - location.y;
+  v2 new_position = {
+    location.x,
+    app.window.size_in_points.y - location.y,
+  };
+  app.mouse.delta_position = sub2(new_position, app.mouse.position);
+  app.mouse.position = new_position;
 }
 
 - (void)mouseDown:(NSEvent*)event {
@@ -534,6 +539,15 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 
 - (void)drawRect:(CGRect)rect {
   @autoreleasepool {
+    // We need to set the initial mouse position so that we can calculate deltas correctly.
+    // We don't want to use the deltaX and deltaY properties on the NSEvent because they only
+    // have pixel level precision, whereas the mouseLocation property offers sub-pixel precision
+    if (app.clocks.frame_count == 1) {
+      NSPoint p = self.window.mouseLocationOutsideOfEventStream;
+      app.mouse.position.x = p.x;
+      app.mouse.position.y = app.window.size_in_points.y - p.y;
+    }
+
     [self _updateWindowAndDisplaySize];
     [self _loadAssets];
 
