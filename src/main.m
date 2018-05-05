@@ -455,9 +455,6 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   }
 }
 
-- (void)_updateWindowSize {
-}
-
 - (void)_loadAssets {
   time_t new_shader_lib_ts = get_last_write_time(shader_lib_path);
   if (new_shader_lib_ts != shader_lib_ts) {
