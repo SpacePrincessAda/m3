@@ -134,6 +134,13 @@ enum key_t {
 
 #define NUMBER_OF_KEYS 256
 
+typedef enum mouse_button_type_t {
+  MOUSE_BUTTON_NONE,
+  MOUSE_BUTTON_LEFT,
+  MOUSE_BUTTON_MIDDLE,
+  MOUSE_BUTTON_RIGHT,
+} mouse_button_type_t;
+
 typedef struct button_t {
   bool down;
   int pressed;
@@ -151,8 +158,18 @@ typedef struct clocks_t {
   u64 start_ticks;
 } clocks_t;
 
-// typedef struct mouse_t {
-// } mouse_t;
+typedef struct mouse_t {
+  bool moved;
+  v2 position;
+  v2 delta_position;
+
+  bool scrolled;
+  v2 delta_scroll;
+
+  button_t left_button;
+  button_t middle_button; // TODO: Figure out how to handle this in macOS
+  button_t right_button;
+} mouse_t;
 
 typedef struct window_t {
   v2 size_in_pixels;
@@ -171,6 +188,7 @@ typedef struct app_t {
   display_t display;
   clocks_t clocks;
   button_t keys[NUMBER_OF_KEYS];
+  mouse_t mouse;
   f32 render_scale;
 } app_t;
 

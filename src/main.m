@@ -12,6 +12,9 @@
 #include "game.c"
 #include "shader_types.h"
 
+// Not sure if this is a good scale factor. Docs don't say.
+#define PRECISE_SCROLLING_SCALE 0.1
+
 // TODO: Pass this into the application delegate
 static int initial_window_width = 840;
 static int initial_window_height = 480;
@@ -26,6 +29,20 @@ static void update_button(button_t* button, bool down) {
   button->down = down;
   button->pressed += down && !was_down;
   button->released += !down && was_down;
+}
+
+static void update_mouse_button(mouse_button_type_t button_type, bool down) {
+  button_t* button;
+  switch (button_type) {
+    case MOUSE_BUTTON_LEFT:
+      button = &app.mouse.left_button; break;
+    case MOUSE_BUTTON_MIDDLE:
+      button = &app.mouse.middle_button; break;
+    case MOUSE_BUTTON_RIGHT:
+      button = &app.mouse.right_button; break;
+    default: return;
+  }
+  update_button(button, down);
 }
 
 static void reset_button(button_t* button) {
@@ -351,6 +368,43 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   return YES;
 }
 
+- (void)mouseMoved:(NSEvent*)event {
+  app.mouse.moved = true;
+  NSPoint location = [event locationInWindow];
+  v2 new_position = {
+    location.x,
+    app.window.size_in_points.y - location.y,
+  };
+  app.mouse.delta_position = sub2(new_position, app.mouse.position);
+  app.mouse.position = new_position;
+}
+
+- (void)mouseDown:(NSEvent*)event {
+  update_mouse_button(MOUSE_BUTTON_LEFT, true);
+}
+
+- (void)mouseUp:(NSEvent*)event {
+  update_mouse_button(MOUSE_BUTTON_LEFT, false);
+}
+
+- (void)rightMouseDown:(NSEvent*)event {
+  update_mouse_button(MOUSE_BUTTON_RIGHT, true);
+}
+
+- (void)rightMouseUp:(NSEvent*)event {
+  update_mouse_button(MOUSE_BUTTON_RIGHT, false);
+}
+
+- (void)scrollWheel:(NSEvent*)event {
+  v2 delta_scroll = {
+    [event scrollingDeltaX],
+    [event scrollingDeltaY],
+  };
+  app.mouse.delta_scroll = [event hasPreciseScrollingDeltas] ? 
+    mul2(delta_scroll, PRECISE_SCROLLING_SCALE) : delta_scroll;
+  app.mouse.scrolled = true;
+}
+
 - (void)keyDown:(NSEvent*)event {
   u8 code = [event keyCode];
   update_button(&app.keys[code], true);
@@ -492,6 +546,17 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
     for (int i=0; i < NUMBER_OF_KEYS; i++) {
       reset_button(&app.keys[i]);
     }
+
+    // Reset mouse
+    app.mouse.moved = false;
+    app.mouse.scrolled = false;
+    app.mouse.delta_position.x = 0;
+    app.mouse.delta_position.y = 0;
+    app.mouse.delta_scroll.x = 0;
+    app.mouse.delta_scroll.y = 0;
+    reset_button(&app.mouse.left_button);
+    reset_button(&app.mouse.middle_button);
+    reset_button(&app.mouse.right_button);
   }
 }
 @end

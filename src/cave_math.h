@@ -163,6 +163,22 @@ eq2(v2 a, v2 b) {
   return a.x == b.x && a.y == b.y;
 }
 
+static inline v2 
+add2(v2 a, v2 b) {
+  v2 r = {};
+  r.x = a.x + b.x;
+  r.y = a.y + b.y;
+  return r;
+}
+
+static inline v2 
+sub2(v2 a, v2 b) {
+  v2 r = {};
+  r.x = a.x - b.x;
+  r.y = a.y - b.y;
+  return r;
+}
+
 static inline v2
 mul2(v2 a, f32 f) {
   v2 r = {};
