@@ -217,14 +217,6 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 - (BOOL)windowShouldClose:(id)sender {
   return YES;
 }
-
-// TODO: Implement these!
-// - (void)windowDidResize:(NSNotification*)notification {}
-// - (void)windowDidMove:(NSNotification*)notification {}
-// - (void)windowDidMiniaturize:(NSNotification*)notification {}
-// - (void)windowDidDeminiaturize:(NSNotification*)notification {}
-// - (void)windowDidBecomeKey:(NSNotification*)notification {}
-// - (void)windowDidResignKey:(NSNotification*)notification {}
 @end
 
 @implementation MetalKitView
@@ -251,7 +243,6 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 }
 
 - (void)_setupApp {
-  // TODO: Query for these
   app.render_scale = 1.0f;
   init_clocks();
   init_world(&app, &world);
@@ -481,8 +472,9 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
     [enc endEncoding];
 
     [command_buffer presentDrawable:[self currentDrawable]];
-    [command_buffer commit];
   }
+
+  [command_buffer commit];
 }
 
 - (void)drawRect:(CGRect)rect {
