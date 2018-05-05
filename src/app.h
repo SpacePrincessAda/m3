@@ -57,8 +57,8 @@ enum key_t {
   KEY_BACKSPACE = 51,
   KEY_KP_ENTER = 52,
   KEY_ESCAPE = 53,
-  KEY_RGUI = 54,
-  KEY_LGUI = 55,
+  KEY_RMETA = 54,
+  KEY_LMETA = 55,
   KEY_LSHIFT = 56,
   KEY_CAPSLOCK = 57,
   KEY_LALT = 58,
@@ -130,9 +130,14 @@ enum key_t {
   KEY_RIGHT = 124,
   KEY_DOWN = 125,
   KEY_UP = 126,
-};
 
-#define NUMBER_OF_KEYS 256
+  // Combination Keys
+  KEY_SHIFT = 128,
+  KEY_CTRL,
+  KEY_ALT,
+  KEY_META,
+  NUMBER_OF_KEYS,
+};
 
 typedef enum mouse_button_type_t {
   MOUSE_BUTTON_NONE,

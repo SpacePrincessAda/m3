@@ -415,6 +415,12 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   update_button(&app.keys[code], false);
 }
 
+- (void)flagsChanged:(NSEvent*)event {
+  u8 code = [event keyCode];
+  // NOTE: Is there a better way to do this, since there's no way to get up/down state here?
+  update_button(&app.keys[code], !app.keys[code].down);
+}
+
 - (void)_updateWindowAndDisplaySize {
   NSWindow *window = [self window];
 
@@ -532,6 +538,11 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   @autoreleasepool {
     [self _updateWindowAndDisplaySize];
     [self _loadAssets];
+
+    update_button(&app.keys[KEY_SHIFT], app.keys[KEY_LSHIFT].down || app.keys[KEY_RSHIFT].down);
+    update_button(&app.keys[KEY_ALT], app.keys[KEY_LALT].down || app.keys[KEY_RALT].down);
+    update_button(&app.keys[KEY_CTRL], app.keys[KEY_LCTRL].down || app.keys[KEY_RCTRL].down);
+    update_button(&app.keys[KEY_META], app.keys[KEY_LMETA].down || app.keys[KEY_RMETA].down);
 
     update_clocks();
     update_and_render(&app, &world, &fs_params.debug_params);
