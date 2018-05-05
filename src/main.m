@@ -246,6 +246,8 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   fs_params_t fs_params;
   dr_params_t dr_params;
 
+  bool _capture_mouse;
+
   time_t shader_lib_ts;
 }
 
@@ -261,9 +263,6 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 
 - (void)_setupApp {
   app.render_scale = 1.0f;
-
-  // app.mouse.position.x = p.x;
-
   init_clocks();
   init_world(&app, &world);
 }
@@ -371,15 +370,19 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   return YES;
 }
 
+// TODO: Mouse support via IO/Kit.
+// The deltaX and deltaY properties here only give per pixel precision.
+// The OS has sub-pixel mouse input precision available and it uses it for
+// locationInWindow. However, that doesn't actually work out if you need to capture
+// mouse input for FPS style controls. So, for now, first person mouse look will
+// just be kinda low precision.
 - (void)mouseMoved:(NSEvent*)event {
   app.mouse.moved = true;
   NSPoint location = [event locationInWindow];
-  v2 new_position = {
-    location.x,
-    app.window.size_in_points.y - location.y,
-  };
-  app.mouse.delta_position = sub2(new_position, app.mouse.position);
-  app.mouse.position = new_position;
+  app.mouse.delta_position.x = [event deltaX];
+  app.mouse.delta_position.y = [event deltaY];
+  app.mouse.position.x = location.x;
+  app.mouse.position.y = app.window.size_in_points.y - location.y;
 }
 
 - (void)mouseDown:(NSEvent*)event {
@@ -537,19 +540,25 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   [command_buffer commit];
 }
 
+- (void)_captureMouse {
+  CGDisplayHideCursor(kCGDirectMainDisplay);
+  CGAssociateMouseAndMouseCursorPosition(false);
+}
+
+- (void)_releaseMouse {
+  CGDisplayShowCursor(kCGDirectMainDisplay);
+  CGAssociateMouseAndMouseCursorPosition(true);
+}
+
 - (void)drawRect:(CGRect)rect {
   @autoreleasepool {
-    // We need to set the initial mouse position so that we can calculate deltas correctly.
-    // We don't want to use the deltaX and deltaY properties on the NSEvent because they only
-    // have pixel level precision, whereas the mouseLocation property offers sub-pixel precision
-    if (app.clocks.frame_count == 1) {
-      NSPoint p = self.window.mouseLocationOutsideOfEventStream;
-      app.mouse.position.x = p.x;
-      app.mouse.position.y = app.window.size_in_points.y - p.y;
-    }
-
     [self _updateWindowAndDisplaySize];
     [self _loadAssets];
+
+    if (_capture_mouse != app.mouse.capture) {
+      app.mouse.capture ? [self _captureMouse] : [self _releaseMouse];
+      _capture_mouse = app.mouse.capture;
+    }
 
     update_button(&app.keys[KEY_SHIFT], app.keys[KEY_LSHIFT].down || app.keys[KEY_RSHIFT].down);
     update_button(&app.keys[KEY_ALT], app.keys[KEY_LALT].down || app.keys[KEY_RALT].down);
