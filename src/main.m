@@ -371,12 +371,10 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 - (void)mouseMoved:(NSEvent*)event {
   app.mouse.moved = true;
   NSPoint location = [event locationInWindow];
-  v2 new_position = {
-    location.x,
-    app.window.size_in_points.y - location.y,
-  };
-  app.mouse.delta_position = sub2(new_position, app.mouse.position);
-  app.mouse.position = new_position;
+  app.mouse.delta_position.x = [event deltaX];
+  app.mouse.delta_position.y = [event deltaY];
+  app.mouse.position.x = location.x;
+  app.mouse.position.y = app.window.size_in_points.y - location.y;
 }
 
 - (void)mouseDown:(NSEvent*)event {
