@@ -365,7 +365,6 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   size_t ui_vbuffer_size = aligned_size(sizeof(render_vert_t) * UINT16_MAX);
   size_t ui_ibuffer_size = aligned_size(sizeof(u16) * UINT16_MAX);
   size_t total_size = ui_vbuffer_size + ui_ibuffer_size;
-  printf("total buffer size: %d\n", (u32)total_size);
 
   size_t page_size = getpagesize();
   posix_memalign(&_app_memory, page_size, total_size);
