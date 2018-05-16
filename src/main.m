@@ -14,6 +14,7 @@
 
 // Not sure if this is a good scale factor. Docs don't say.
 #define PRECISE_SCROLLING_SCALE 0.1
+#define MAX_BUFFERS_IN_FLIGHT 1
 
 // TODO: Pass this into the application delegate
 static int initial_window_width = 840;
@@ -23,6 +24,39 @@ static app_t app = {};
 static world_t world = {};
 
 const char* shader_lib_path = "build/standard.metallib";
+
+#define kilobytes(value) ((value)*1024LL)
+#define megabytes(value) (kilobytes(value)*1024LL)
+#define gigabytes(value) (megabytes(value)*1024LL)
+
+typedef struct memory_arena_t {
+  size_t size;
+  size_t alignment;
+  u8 *base;
+  size_t used;
+} memory_arena_t;
+
+static void 
+init_arena(memory_arena_t* arena, size_t size, void* base) {
+  arena->size = size;
+  arena->base = (u8*)base;
+  arena->used = 0;
+}
+
+static void 
+reset_arena(memory_arena_t* arena) {
+  arena->used = 0;
+}
+
+static void* 
+push_size(memory_arena_t* arena, size_t size) {
+  assert((arena->used + size) <= arena->size);
+
+  void* result = arena->base + arena->used;
+  arena->used += size;
+
+  return result;
+}
 
 static void update_button(button_t* button, bool down) {
   bool was_down = button->down;
@@ -93,6 +127,47 @@ static void update_render_camera(camera_t* c, f32 aspect, render_camera_t* r) {
   r->film_h = v3_to_float3(mul3(u, 2*half_width));
   r->film_v = v3_to_float3(mul3(v, 2*half_height));
   r->film_lower_left = v3_to_float3(ll3);
+}
+
+typedef struct ui_context_t {
+  u32 v_count;
+  u32 i_count;
+  memory_arena_t varena;
+  memory_arena_t iarena;
+} ui_context_t;
+
+static void
+reset_ui_context(ui_context_t* rs) {
+  reset_arena(&rs->varena);
+  reset_arena(&rs->iarena);
+  rs->v_count = 0;
+  rs->i_count = 0;
+}
+
+static void 
+push_ui_rect(ui_context_t* rs, v2 pos, v2 size, v4 color) {
+  render_vert_t* verts = push_size(&rs->varena, sizeof(render_vert_t)*4);
+  u16* indices = push_size(&rs->iarena, sizeof(u16)*6);
+
+  verts[0].position = (vector_float2){pos.x, pos.y};
+  verts[1].position = (vector_float2){pos.x + size.x, pos.y};
+  verts[2].position = (vector_float2){pos.x + size.x, pos.y + size.y};
+  verts[3].position = (vector_float2){pos.x, pos.y + size.y};
+
+  verts[0].color = (vector_float4){color.r, color.g, color.b, color.a};
+  verts[1].color = (vector_float4){color.r, color.g, color.b, color.a};
+  verts[2].color = (vector_float4){color.r, color.g, color.b, color.a};
+  verts[3].color = (vector_float4){color.r, color.g, color.b, color.a};
+
+  indices[0] = rs->v_count;
+  indices[1] = rs->v_count+1;
+  indices[2] = rs->v_count+2;
+  indices[3] = rs->v_count;
+  indices[4] = rs->v_count+2;
+  indices[5] = rs->v_count+3;
+
+  rs->v_count += 4;
+  rs->i_count += 6;
 }
 
 static int aligned_size(int sz) {
@@ -236,19 +311,37 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
 }
 @end
 
+#define MAX_FRAME_TIMES 128
+
 @implementation MetalKitView
 {
   id<MTLCommandQueue> _command_queue;
   id<MTLRenderPipelineState> _standard_pso;
   id<MTLRenderPipelineState> _dynamic_res_pso;
+  id<MTLRenderPipelineState> _ui_pso;
   id<MTLTexture> _offscreen_buffer;
+
+  id<MTLBuffer> _ui_vbuffer;
+  id<MTLBuffer> _ui_ibuffer;
+
+  ui_context_t _ui_context;
 
   fs_params_t fs_params;
   dr_params_t dr_params;
+  ui_vs_params_t ui_vs_params;
 
   bool _capture_mouse;
+  u64 cmd_start_time;
+
+  f32 _frame_times[MAX_FRAME_TIMES];
+  int _frame_time_ordinal;
+
+  NSUInteger _max_buffers_in_flight;
+  dispatch_semaphore_t _frame_boundary_semaphore;
 
   time_t shader_lib_ts;
+
+  void* _app_memory;
 }
 
 -(nonnull instancetype)initWithDevice:(nonnull id<MTLDevice>)device {
@@ -257,14 +350,43 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
     [self setDevice: device];
     [self _setupApp];
     [self _setupMetal];
+    [self _createBuffers];
   }
   return self;
 }
 
 - (void)_setupApp {
-  app.render_scale = 1.0f;
+  app.render_scale = 0.5f;
   init_clocks();
   init_world(&app, &world);
+}
+
+- (void)_createBuffers {
+  size_t ui_vbuffer_size = aligned_size(sizeof(render_vert_t) * UINT16_MAX);
+  size_t ui_ibuffer_size = aligned_size(sizeof(u16) * UINT16_MAX);
+  size_t total_size = ui_vbuffer_size + ui_ibuffer_size;
+  printf("total buffer size: %d\n", (u32)total_size);
+
+  size_t page_size = getpagesize();
+  posix_memalign(&_app_memory, page_size, total_size);
+
+  init_arena(&_ui_context.varena, ui_vbuffer_size, _app_memory);
+  init_arena(&_ui_context.iarena, ui_ibuffer_size, 
+      (u8*)_app_memory + ui_vbuffer_size);
+
+  _ui_vbuffer = [self.device
+     newBufferWithBytesNoCopy:_ui_context.varena.base 
+                       length:_ui_context.varena.size
+                      options:MTLResourceStorageModeShared
+                  deallocator:nil
+  ];
+
+  _ui_ibuffer = [self.device
+     newBufferWithBytesNoCopy:_ui_context.iarena.base 
+                       length:_ui_context.iarena.size
+                      options:MTLResourceStorageModeShared
+                  deallocator:nil
+  ];
 }
 
 - (void)_createOffscreenBuffer {
@@ -290,6 +412,7 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
       // NOTE: Make sure to release all PSOs that used the library here
       [_standard_pso release];
       [_dynamic_res_pso release];
+      [_ui_pso release];
     }
 
     // Load shaders
@@ -339,6 +462,41 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
       [psd release];
     }
 
+    // UI PSO
+    {
+      id<MTLFunction> vertex_func = [library newFunctionWithName:@"ui_vs_main"];
+      id<MTLFunction> fragment_func = [library newFunctionWithName:@"ui_fs_main"];
+
+      MTLVertexDescriptor* vd = [[MTLVertexDescriptor alloc] init];
+      vd.attributes[0].format = MTLVertexFormatFloat2;
+      vd.attributes[0].bufferIndex = 0;
+      vd.attributes[0].offset = 0;
+
+      vd.attributes[1].format = MTLVertexFormatFloat4;
+      vd.attributes[1].bufferIndex = 0;
+      vd.attributes[1].offset = 2 * 4;
+
+      vd.layouts[0].stride = 6 * 4;
+      vd.layouts[0].stepFunction = MTLVertexStepFunctionPerVertex;
+
+      MTLRenderPipelineDescriptor *psd = [MTLRenderPipelineDescriptor new];
+      psd.label = @"UI Pipeline";
+      psd.vertexFunction = vertex_func;
+      psd.fragmentFunction = fragment_func;
+      psd.colorAttachments[0].pixelFormat = self.colorPixelFormat;
+      psd.vertexDescriptor = vd;
+
+      NSError *error = nil;
+      _ui_pso = [self.device newRenderPipelineStateWithDescriptor:psd error:&error];
+      if (!_ui_pso) {
+        NSLog(@"Error occurred when creating render pipeline state: %@", error);
+      }
+      [vd release];
+      [vertex_func release];
+      [fragment_func release];
+      [psd release];
+    }
+
     [library release];
     library = nil;
   }
@@ -349,6 +507,8 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   [self setColorPixelFormat:MTLPixelFormatBGRA8Unorm];
   // [self setDepthStencilPixelFormat:MTLPixelFormatDepth32Float_Stencil8];
   [self setSampleCount:1];
+
+  _frame_boundary_semaphore = dispatch_semaphore_create(MAX_BUFFERS_IN_FLIGHT);
 
   _command_queue = [self.device newCommandQueue];
   [self _updateWindowAndDisplaySize];
@@ -476,6 +636,40 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   }
 }
 
+// TODO: move this responsibility into the game code once it can handle render ops
+- (void)_drawFrameTimes {
+  v4 color = V4(0.67f, 0.69f, 0.75f, 1);
+  f32 height_mod = 2.0f;
+  f32 gutter_total = 2.0f * (MAX_FRAME_TIMES-2);
+  f32 bar_width = (app.window.size_in_pixels.x - gutter_total) / MAX_FRAME_TIMES;
+  f32 bar_spacing = 2.0f;
+
+  push_ui_rect(&_ui_context, 
+    V2(0,0), 
+    V2(app.window.size_in_pixels.x, 33.333f * height_mod), 
+    V4(0.16f, 0.17f, 0.2f, 1.0f)
+  );
+
+  push_ui_rect(&_ui_context, 
+    V2(0, 16.666f * height_mod), 
+    V2(app.window.size_in_pixels.x, 2.0f), 
+    V4(0.596f, 0.764f, 0.474f, 1)
+  );
+
+  push_ui_rect(&_ui_context, 
+    V2(0, 33.333f * height_mod), 
+    V2(app.window.size_in_pixels.x, 2.0f), 
+    V4(0.88f, 0.42f, 0.46f, 1)
+  );
+
+  for (int i=0; i < MAX_FRAME_TIMES; i++) {
+    int index = (i + (_frame_time_ordinal+1)) % MAX_FRAME_TIMES;
+    f32 x = ((f32)i) * (bar_width + bar_spacing);
+    f32 h = _frame_times[index] * height_mod;
+    push_ui_rect(&_ui_context, V2(x,0), V2(bar_width,h), color);
+  }
+}
+
 - (void)_render {
   fs_params.frame_count = app.clocks.frame_count;
   fs_params.viewport_size.x = app.window.size_in_pixels.x;
@@ -484,11 +678,26 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   dr_params.osb_to_rt_ratio.x = (app.window.size_in_pixels.x*app.render_scale) / app.display.size_in_pixels.x;
   dr_params.osb_to_rt_ratio.y = (app.window.size_in_pixels.y*app.render_scale) / app.display.size_in_pixels.y;
 
+  v2 viewport_size = {app.window.size_in_pixels.x, app.window.size_in_pixels.y};
+
+  ui_vs_params.view_matrix = (matrix_float4x4){
+    (vector_float4){ 2.0f/viewport_size.x,  0.0f,                   0.0f, 0.0f },
+    (vector_float4){ 0.0f,                  2.0f/-viewport_size.y,  0.0f, 0.0f },
+    (vector_float4){ 0.0f,                  0.0f,                  -1.0f, 0.0f },
+    (vector_float4){-1.0f,                  1.0f,                   0.0f, 1.0f },
+  };
+
   id<MTLCommandBuffer> command_buffer = [_command_queue commandBuffer];
+
+  [command_buffer addScheduledHandler:^(id<MTLCommandBuffer> buffer) {
+    cmd_start_time = mach_absolute_time();
+  }];
+
+#if 1
 
   // Render to offscreen buffer
   {
-    MTLRenderPassDescriptor *pass = [self currentRenderPassDescriptor];
+    MTLRenderPassDescriptor *pass = [MTLRenderPassDescriptor new];
     pass.colorAttachments[0].texture = _offscreen_buffer;
     pass.colorAttachments[0].loadAction = MTLLoadActionClear;
     pass.colorAttachments[0].storeAction = MTLStoreActionStore;
@@ -511,8 +720,8 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
   }
 
   // Display from offscreen buffer
+  id<MTLTexture> texture = [[self currentDrawable] texture];
   {
-    id<MTLTexture> texture = [[self currentDrawable] texture];
     MTLRenderPassDescriptor *pass = [self currentRenderPassDescriptor];
     pass.colorAttachments[0].texture = texture;
     pass.colorAttachments[0].loadAction = MTLLoadActionClear;
@@ -533,9 +742,53 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
                       atIndex:0];
     [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
     [enc endEncoding];
-
-    [command_buffer presentDrawable:[self currentDrawable]];
   }
+#endif
+
+  // UI
+  {
+    MTLRenderPassDescriptor *pass = [self currentRenderPassDescriptor];
+    pass.colorAttachments[0].texture = texture;
+    pass.colorAttachments[0].loadAction = MTLLoadActionLoad;
+    pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+    // pass.colorAttachments[0].clearColor = MTLClearColorMake(0.16f, 0.17f, 0.2f, 1.0f);
+    id<MTLRenderCommandEncoder> enc = [command_buffer 
+      renderCommandEncoderWithDescriptor:pass];
+    MTLViewport vp = {
+      .width = app.window.size_in_pixels.x,
+      .height = app.window.size_in_pixels.y,
+      .zfar = 1.0,
+    };
+    [enc setViewport:vp];
+    [enc setRenderPipelineState:_ui_pso];
+    [enc setVertexBuffer:_ui_vbuffer
+                  offset:0
+                 atIndex:0
+    ];
+    [enc setVertexBytes:&ui_vs_params
+                       length:sizeof(ui_vs_params_t)
+                      atIndex:1];
+    [enc drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+                    indexCount:_ui_context.i_count
+                     indexType:MTLIndexTypeUInt16
+                   indexBuffer:_ui_ibuffer
+             indexBufferOffset:0
+    ];
+    [enc endEncoding];
+  }
+  [command_buffer presentDrawable:[self currentDrawable]];
+
+  dispatch_semaphore_t semaphore = _frame_boundary_semaphore;
+  [command_buffer addCompletedHandler:^(id<MTLCommandBuffer> cb) {
+    // GPU work is complete
+    // Signal the semaphore to start the CPU work
+    dispatch_semaphore_signal(semaphore);
+    u64 cmd_end_time = mach_absolute_time();
+    u64 total_time = cmd_end_time - cmd_start_time;
+    f32 t = (f64)(total_time * 1000) / (f64)(app.clocks.ticks_per_sec);
+    _frame_time_ordinal = app.clocks.frame_count % MAX_FRAME_TIMES;
+    _frame_times[_frame_time_ordinal] = t;
+  }];
 
   [command_buffer commit];
 }
@@ -555,6 +808,8 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
     [self _updateWindowAndDisplaySize];
     [self _loadAssets];
 
+    dispatch_semaphore_wait(_frame_boundary_semaphore, DISPATCH_TIME_FOREVER);
+
     if (_capture_mouse != app.mouse.capture) {
       app.mouse.capture ? [self _captureMouse] : [self _releaseMouse];
       _capture_mouse = app.mouse.capture;
@@ -564,6 +819,16 @@ id<MTLLibrary> load_shader_library(id<MTLDevice> device, const char* src) {
     update_button(&app.keys[KEY_ALT], app.keys[KEY_LALT].down || app.keys[KEY_RALT].down);
     update_button(&app.keys[KEY_CTRL], app.keys[KEY_LCTRL].down || app.keys[KEY_RCTRL].down);
     update_button(&app.keys[KEY_META], app.keys[KEY_LMETA].down || app.keys[KEY_RMETA].down);
+
+    reset_ui_context(&_ui_context);
+
+    if (app.keys[KEY_F].pressed) {
+      app.show_frame_times = !app.show_frame_times;
+    }
+
+    if (app.show_frame_times) {
+      [self _drawFrameTimes];
+    }
 
     update_clocks();
     update_and_render(&app, &world, &fs_params.debug_params);

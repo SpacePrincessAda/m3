@@ -1,4 +1,5 @@
 #include <metal_stdlib>
+#import <simd/simd.h>
 using namespace metal;
 
 #include "../shader_types.h"

@@ -109,6 +109,16 @@ V3(f32 x, f32 y, f32 z) {
 #define v3_up       V3(0, 1, 0)
 #define v3_forward  V3(0, 0, 1)
 
+static inline v4 
+V4(f32 x, f32 y, f32 z, f32 w) {
+  v4 r;
+  r.x = x;
+  r.y = y;
+  r.z = z;
+  r.w = w;
+  return r;
+}
+
 static inline quat
 Q(f32 x, f32 y, f32 z, f32 w) {
   quat r;

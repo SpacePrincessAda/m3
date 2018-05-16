@@ -4,6 +4,11 @@
 #include "cave_math.h"
 #include "debug_params.h"
 
+
+//
+// TODO: Move as much of the UI setup/layout as possible sit outside of the platform layer
+//
+
 void init_world(app_t* app, world_t* world) {
   world->orbit_cam.target = V3(0,1,0);
   world->orbit_cam.zoom = 10;
@@ -20,6 +25,8 @@ void init_world(app_t* app, world_t* world) {
 void update_and_render(app_t* app, world_t* world, debug_params_t* debug_params) {
   // printf("%f\n", app->clocks.delta_secs);
   f32 dt = app->clocks.delta_secs;
+
+  int width = app->display.size_in_points.x;
 
   if (app->keys[KEY_L].pressed) {
     app->mouse.capture = !app->mouse.capture;

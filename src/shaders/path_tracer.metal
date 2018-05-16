@@ -1,4 +1,5 @@
 #include <metal_stdlib>
+#import <simd/simd.h>
 using namespace metal;
 
 #include "../shader_types.h"
@@ -150,7 +151,7 @@ fragment float4 screen_fs_main(screen_vert_t i [[stage_in]], constant fs_params_
   // Superficially, this seems like a decent source of entropy...
   uint32_t ix = (uint32_t)i.pos.x;
   uint32_t iy = (uint32_t)i.pos.y;
-  uint rng = wang_hash(((ix*1973) + (iy*9277) + (rp.frame_count*26699))|1);
+  uint rng = wang_hash(((ix*1973) + (iy*9277) + ((rp.frame_count)*26699))|1);
 
 #if SAMPLES_PER_PIXEL == 1
   ray_t ray = ray_from_camera(camera, i.uv.x, i.uv.y);

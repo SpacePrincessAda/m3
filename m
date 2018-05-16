@@ -16,8 +16,8 @@ CTIME_EXEC="utils/ctime"
 CTIME_SOURCE="utils/ctime.c"
 CTIME_TIMING_FILE=".build.ctm"
 
-MTL_C="xcrun -sdk macosx metal"
-MTL_C_FLAGS="-Wno-unused-variable -mmacosx-version-min=10.11 -std=osx-metal1.1"
+MTL_C="xcrun -sdk macosx metal -gline-tables-only"
+MTL_C_FLAGS="-Wno-unused-variable -mmacosx-version-min=10.11 -std=osx-metal1.1 -gline-tables-only"
 MTLLIB_C="xcrun -sdk macosx metallib"
 
 # Abort on first error
@@ -46,6 +46,7 @@ $MTL_C $MTL_C_FLAGS $SRC/shaders/ray_marcher.metal -o $BUILD/standard.air
 # $MTL_C $MTL_C_FLAGS $SRC/shaders/path_tracer.metal -o $BUILD/standard.air
 # $MTL_C $MTL_C_FLAGS $SRC/shaders/ray_tracer.metal -o $BUILD/standard.air
 $MTL_C $MTL_C_FLAGS $SRC/shaders/dynamic_resolution.metal -o $BUILD/dynamic_resolution.air
+$MTL_C $MTL_C_FLAGS $SRC/shaders/ui.metal -o $BUILD/ui.air
 
 # build shader library and move it into place
 # the move is important, otherwise the app might try to load it while it's building

@@ -197,5 +197,6 @@ typedef struct app_t {
   button_t keys[NUMBER_OF_KEYS];
   mouse_t mouse;
   f32 render_scale;
+  bool show_frame_times;
 } app_t;
 
